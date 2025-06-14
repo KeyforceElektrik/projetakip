@@ -7,192 +7,9 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
     <link rel="stylesheet" href="style.css">
-    <style>
-        /* Sadece rapor sayfasına özel ek stiller */
-        .report-filter-section {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 30px;
-            padding: 20px;
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            align-items: flex-end; /* Butonu inputlarla hizala */
-            flex-wrap: wrap; /* Küçük ekranlarda alt alta geçsin */
-        }
-        .report-filter-section .form-group {
-            margin-bottom: 0; /* İçindeki form-group'ların alt boşluğunu sıfırla */
-            flex: 1; /* Eşit genişlikte dağılsınlar */
-            min-width: 180px; /* Minimum genişlik */
-        }
-        .report-filter-section button {
-            flex-shrink: 0; /* Buton daralmasın */
-        }
-
-        .report-summary-box {
-            background-color: #e6f7ff; /* Daha açık mavi, rapor özeti için */
-            padding: 25px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); /* Esnek sütunlar */
-            gap: 20px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-        }
-        .report-summary-item {
-            text-align: center;
-            background-color: #ffffff;
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid #cce5ff;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
-        }
-        .report-summary-item h3 {
-            margin-top: 0;
-            font-size: 1.1em;
-            color: #0056b3;
-            margin-bottom: 5px;
-        }
-        .report-summary-item p {
-            font-size: 1.8em;
-            font-weight: 700;
-            color: #28a745;
-            margin: 0;
-        }
-        .report-summary-item.negative p {
-            color: #dc3545;
-        }
-
-        /* Rapor tablosu özel stiller */
-        .report-table-container {
-            margin-bottom: 30px;
-        }
-        .report-table th.sortable {
-            cursor: pointer;
-            position: relative;
-        }
-        .report-table th.sortable::after {
-            content: '';
-            display: inline-block;
-            width: 0;
-            height: 0;
-            margin-left: 8px;
-            vertical-align: middle;
-            border-left: 5px solid transparent;
-            border-right: 5px solid transparent;
-        }
-        .report-table th.sortable.asc::after {
-            border-bottom: 5px solid #333;
-        }
-        .report-table th.sortable.desc::after {
-            border-top: 5px solid #333;
-        }
-        .report-table tr.expandable-row {
-            cursor: pointer;
-            background-color: #f9f9f9;
-        }
-        .report-table tr.expandable-row:hover {
-            background-color: #f0f8ff;
-        }
-        .report-table tr.expanded-details td {
-            padding: 10px 20px;
-            background-color: #f0f4f7; /* Açık mavi ton */
-            border-bottom: 1px solid #e0e0e0;
-        }
-        .expanded-details .inner-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        .expanded-details .inner-table th,
-        .expanded-details .inner-table td {
-            border: 1px solid #e9ecef;
-            padding: 8px 10px;
-            text-align: left;
-            font-size: 0.9em;
-        }
-        .expanded-details .inner-table th {
-            background-color: #e2e8ed;
-            font-weight: 600;
-        }
-        
-        .category-analysis-table th.sortable {
-            cursor: pointer;
-            position: relative;
-        }
-        .category-analysis-table th.sortable::after {
-            content: '';
-            display: inline-block;
-            width: 0;
-            height: 0;
-            margin-left: 8px;
-            vertical-align: middle;
-            border-left: 5px solid transparent;
-            border-right: 5px solid transparent;
-        }
-        .category-analysis-table th.sortable.asc::after {
-            border-bottom: 5px solid #333;
-        }
-        .category-analysis-table th.sortable.desc::after {
-            border-top: 5px solid #333;
-        }
-        .category-analysis-table td.category-name {
-            cursor: pointer;
-            color: #007bff;
-            text-decoration: underline;
-        }
-        .category-analysis-table td.category-name:hover {
-            color: #0056b3;
-        }
-
-        .filter-status {
-            text-align: center;
-            margin-bottom: 20px;
-            font-size: 1.1em;
-            font-weight: bold;
-            color: #34495e;
-            display: none; /* Varsayılan olarak gizli */
-        }
-        .filter-status button {
-            margin-left: 15px;
-            padding: 6px 12px;
-            background-color: #f1c40f; /* Sarı buton */
-            color: #333;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-        }
-        .filter-status button:hover {
-            background-color: #e6b700;
-        }
-
-        @media (max-width: 768px) {
-            .report-filter-section {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            .report-filter-section .form-group {
-                min-width: unset;
-                width: 100%;
-            }
-            .report-filter-section button {
-                width: 100%;
-                margin-top: 10px;
-            }
-            .report-summary-box {
-                grid-template-columns: 1fr; /* Tek sütun */
-            }
-            .report-summary-item {
-                border-right: none;
-                border-bottom: 1px solid #cce5ff;
-            }
-            .report-summary-item:last-child {
-                border-bottom: none;
-            }
-        }
-    </style>
-</head>
+    </head>
 <body>
     <div class="container">
         <header>
@@ -257,6 +74,18 @@
             </div>
         </div>
 
+        <h2 class="section-title">Rapor Grafikleri</h2>
+        <div class="chart-section">
+            <div class="chart-container">
+                <h3>Kategori Bazlı Kar/Zarar Dağılımı</h3>
+                <canvas id="categoryProfitLossChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>Proje Durum Dağılımı</h3>
+                <canvas id="projectStatusChart"></canvas>
+            </div>
+            </div>
+
         <h2 class="section-title">Proje Detay Tablosu</h2>
         <div class="report-table-container">
             <table class="financial-table report-table">
@@ -292,7 +121,7 @@
                         <th class="sortable" data-sort="totalContractAmount">Toplam Sözl. Bedeli (TL)</th>
                         <th class="sortable" data-sort="totalExpense">Toplam Harcama (TL)</th>
                         <th class="sortable" data-sort="totalCollection">Toplam Tahsilat (TL)</th>
-                        <th class="sortable" data-sort="netProfitLoss">Toplam Net Kar/Zarar (TL)</th>
+                        <th class="sortable" data-sort="totalNetProfitLoss">Toplam Net Kar/Zarar (TL)</th>
                         <th class="sortable" data-sort="averageProfitMargin">Ort. Kar Marjı (%)</th>
                         <th>En Karlı Proje</th>
                         <th>En Zararlı Proje</th>
@@ -361,6 +190,9 @@
         let currentUserId = null;
         let activeCategoryFilter = null; // Aktif kategori filtresi
 
+        let categoryProfitLossChart; // Chart.js grafik objesi
+        let projectStatusChart;    // Chart.js grafik objesi
+
         // Kullanıcı giriş durumunu izle
         auth.onAuthStateChanged(user => {
             if (user) {
@@ -421,6 +253,7 @@
             currentCategoryFilterStatus.style.display = 'none';
             displayProjectData(filteredProjects); // Ana filtreyi koruyarak tekrar render et
             displayCategoryAnalysis(filteredProjects);
+            updateCharts(filteredProjects); // Kategori filtresi temizlendiğinde grafikleri güncelle
         });
 
         async function loadReportData() {
@@ -435,6 +268,7 @@
                 projectDetailTableBody.innerHTML = '<tr><td colspan="12" style="text-align:center;">Lütfen rapor oluşturmak için tarih aralığı seçin.</td></tr>';
                 categoryAnalysisTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Kategori bazlı analiz raporu için tarih aralığı seçin.</td></tr>';
                 updateGeneralSummary([]); // Özeti sıfırla
+                updateCharts([]); // Grafikleri sıfırla
                 resetFilterButton.style.display = 'none';
                 return;
             }
@@ -515,6 +349,7 @@
                 updateGeneralSummary(filteredProjects);
                 displayProjectData(filteredProjects);
                 displayCategoryAnalysis(filteredProjects);
+                updateCharts(filteredProjects); // Veriler yüklendikten sonra grafikleri güncelle
                 showSystemMessage('Rapor başarıyla oluşturuldu.', false);
 
             } catch (error) {
@@ -535,6 +370,7 @@
                 currentCategoryFilterStatus.style.display = 'none';
             }
             displayProjectData(filteredProjects); // Yeniden çiz
+            updateCharts(filteredProjects); // Grafikleri de filtreye göre güncelle
         }
 
         // Genel Özeti Güncelleme
@@ -755,8 +591,8 @@
 
                 // Tarih alanları için özel dönüşüm
                 if (column.includes('Date')) {
-                    valA = a[column] ? a[column].toDate().getTime() : 0;
-                    valB = b[column] ? b[column].toDate().getTime() : 0;
+                    valA = a[column] ? a[column].toDate().getTime() : (direction === 'asc' ? -Infinity : Infinity); // Null tarihler için varsayılan değer
+                    valB = b[column] ? b[column].toDate().getTime() : (direction === 'asc' ? -Infinity : Infinity);
                 }
                 // String alanlar için küçük harfe çevirme
                 else if (typeof valA === 'string') {
@@ -908,6 +744,152 @@
             });
         });
 
+        // Chart.js Grafikleri Güncelleme Fonksiyonu
+        function updateCharts(projects) {
+            // Kategori Bazlı Kar/Zarar Grafiği
+            const categoryProfitLossCtx = document.getElementById('categoryProfitLossChart').getContext('2d');
+            const categoryData = {};
+            projects.forEach(p => {
+                if (p.categories) {
+                    p.categories.forEach(cat => {
+                        categoryData[cat] = (categoryData[cat] || 0) + p.netProfitLoss;
+                    });
+                }
+            });
+
+            const categoryLabels = Object.keys(categoryData);
+            const categoryProfits = Object.values(categoryData);
+
+            // Renk paleti oluşturma (pozitif ve negatif kar için farklı renkler)
+            const backgroundColors = categoryProfits.map(profit => profit >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)');
+            const borderColors = categoryProfits.map(profit => profit >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)');
+
+            if (categoryProfitLossChart) {
+                categoryProfitLossChart.destroy(); // Önceki grafiği yok et
+            }
+            categoryProfitLossChart = new Chart(categoryProfitLossCtx, {
+                type: 'bar',
+                data: {
+                    labels: categoryLabels,
+                    datasets: [{
+                        label: 'Net Kar/Zarar (TL)',
+                        data: categoryProfits,
+                        backgroundColor: backgroundColors,
+                        borderColor: borderColors,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false, // Konteyner boyutuna uyum sağla
+                    plugins: {
+                        legend: {
+                            display: false // Efsaneyi gizle
+                        },
+                        title: {
+                            display: true,
+                            text: 'Kategori Bazlı Net Kar/Zarar',
+                            font: {
+                                size: 16
+                            }
+                        },
+                        tooltip: { // Tooltip formatlaması
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value, index, values) {
+                                    return value.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 });
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+
+            // Proje Durum Dağılım Grafiği
+            const projectStatusCtx = document.getElementById('projectStatusChart').getContext('2d');
+            const statusCounts = {};
+            projects.forEach(p => {
+                statusCounts[p.status] = (statusCounts[p.status] || 0) + 1;
+            });
+
+            const statusLabels = Object.keys(statusCounts);
+            const statusValues = Object.values(statusCounts);
+
+            const statusColors = {
+                'Başlamadı': '#6c757d', // Gri
+                'Devam Ediyor': '#007bff', // Mavi
+                'Takip Ediliyor': '#ffc107', // Sarı
+                'Tamamlandı': '#28a745' // Yeşil
+            };
+
+            const statusBackgroundColors = statusLabels.map(label => statusColors[label] || '#cccccc');
+
+            if (projectStatusChart) {
+                projectStatusChart.destroy(); // Önceki grafiği yok et
+            }
+            projectStatusChart = new Chart(projectStatusCtx, {
+                type: 'doughnut', // Pie yerine Doughnut daha şık olabilir
+                data: {
+                    labels: statusLabels,
+                    datasets: [{
+                        label: 'Proje Sayısı',
+                        data: statusValues,
+                        backgroundColor: statusBackgroundColors,
+                        borderColor: '#ffffff', // Beyaz çerçeve
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right', // Efsaneyi sağda göster
+                            labels: {
+                                font: {
+                                    size: 14
+                                }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Proje Durum Dağılımı',
+                            font: {
+                                size: 16
+                            }
+                        },
+                        tooltip: { // Tooltip formatlaması
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.dataset.data.reduce((sum, current) => sum + current, 0);
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
     </script>
 </body>
 </html>
