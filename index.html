@@ -17,7 +17,7 @@
             color: #333;
         }
         .container {
-            max-width: 1200px; /* Daha geniş bir konteyner */
+            max-width: 1200px;
             margin: 0 auto;
             background-color: #fff;
             padding: 30px;
@@ -52,7 +52,7 @@
             border-radius: 5px;
             cursor: pointer;
             transition: background-color 0.3s ease;
-            margin-left: 15px; /* Kullanıcı bilgisi ile arasına boşluk */
+            margin-left: 15px;
         }
         .logout-button:hover {
             background-color: #c82333;
@@ -65,7 +65,14 @@
             color: #155724;
             border: 1px solid #c3e6cb;
             text-align: center;
+            display: none; /* Başlangıçta gizli */
         }
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
         .section-title {
             margin-top: 40px;
             margin-bottom: 20px;
@@ -73,14 +80,106 @@
             border-bottom: 2px solid #0056b3;
             padding-bottom: 5px;
         }
-        /* Geçici içerik */
-        #projectListContent {
-            min-height: 200px;
-            border: 1px dashed #ccc;
-            padding: 20px;
-            text-align: center;
-            color: #666;
+
+        /* Form Stilleri */
+        .form-group {
+            margin-bottom: 15px;
         }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input[type="text"],
+        .form-group select {
+            width: calc(100% - 22px); /* Padding ve border hesaplandı */
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+        .form-group .checkbox-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 5px;
+        }
+        .form-group .checkbox-group label {
+            display: inline-flex;
+            align-items: center;
+            font-weight: normal;
+        }
+        .form-group .checkbox-group input[type="checkbox"] {
+            margin-right: 5px;
+        }
+        .button {
+            padding: 10px 20px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            font-size: 1em;
+            margin-top: 10px;
+        }
+        .button:hover {
+            background-color: #218838;
+        }
+
+        /* Proje Listesi Tablo Stilleri */
+        .project-table-container {
+            overflow-x: auto; /* Yatay kaydırma */
+            margin-top: 20px;
+        }
+        .project-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .project-table th, .project-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+            white-space: nowrap; /* Satırda kalmasını sağlar */
+        }
+        .project-table th {
+            background-color: #f2f2f2;
+            cursor: pointer;
+        }
+        .project-table th:hover {
+            background-color: #e6e6e6;
+        }
+        .project-table td a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .project-table td a:hover {
+            text-decoration: underline;
+        }
+        .project-table .delete-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+        .project-table .delete-btn:hover {
+            background-color: #c82333;
+        }
+        .project-table .status-badge {
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            color: white;
+        }
+        .status-baslamadi { background-color: #6c757d; } /* Gri */
+        .status-devamediyor { background-color: #007bff; } /* Mavi */
+        .status-takipediliyor { background-color: #ffc107; color: #333; } /* Sarı */
+        .status-tamamlandi { background-color: #28a745; } /* Yeşil */
     </style>
 </head>
 <body>
@@ -95,10 +194,77 @@
 
         <div class="message" id="systemMessage"></div>
 
+        <h2 class="section-title">Yeni Proje Ekle</h2>
+        <form id="addProjectForm">
+            <div class="form-group">
+                <label for="projectName">Proje Adı:</label>
+                <input type="text" id="projectName" required>
+            </div>
+            <div class="form-group">
+                <label for="customerName">Müşteri Adı:</label>
+                <input type="text" id="customerName" required>
+            </div>
+            <div class="form-group">
+                <label>Proje Kategorileri (Çoklu Seçim):</label>
+                <div class="checkbox-group">
+                    <label><input type="checkbox" name="projectCategory" value="Aydınlatma"> Aydınlatma</label>
+                    <label><input type="checkbox" name="projectCategory" value="Otomasyon"> Otomasyon</label>
+                    <label><input type="checkbox" name="projectCategory" value="Taahhüt"> Taahhüt</label>
+                    <label><input type="checkbox" name="projectCategory" value="Danışmanlık"> Danışmanlık</label>
+                    <label><input type="checkbox" name="projectCategory" value="Diğer"> Diğer</label>
+                </div>
+            </div>
+            <button type="submit" class="button">Proje Ekle</button>
+        </form>
+
         <h2 class="section-title">Projelerim</h2>
-        <div id="projectListContent">
-            <p>Proje listesi burada görüntülenecek.</p>
-            <p>Bu kısım henüz geliştirilmedi.</p>
+        <div class="filter-sort-controls">
+            <label for="filterStatus">Durum:</label>
+            <select id="filterStatus">
+                <option value="">Tüm Durumlar</option>
+                <option value="Başlamadı">Başlamadı</option>
+                <option value="Devam Ediyor">Devam Ediyor</option>
+                <option value="Takip Ediliyor">Takip Ediliyor</option>
+                <option value="Tamamlandı">Tamamlandı</option>
+            </select>
+
+            <label for="filterCategory">Kategori:</label>
+            <select id="filterCategory">
+                <option value="">Tüm Kategoriler</option>
+                <option value="Aydınlatma">Aydınlatma</option>
+                <option value="Otomasyon">Otomasyon</option>
+                <option value="Taahhüt">Taahhüt</option>
+                <option value="Danışmanlık">Danışmanlık</option>
+                <option value="Diğer">Diğer</option>
+            </select>
+
+            <label for="sortBy">Sırala:</label>
+            <select id="sortBy">
+                <option value="createdAt_desc">Oluşturulma Tarihi (Yeniye Eskiye)</option>
+                <option value="createdAt_asc">Oluşturulma Tarihi (Eskiden Yeniye)</option>
+                <option value="projectName_asc">Proje Adı (A-Z)</option>
+                <option value="projectName_desc">Proje Adı (Z-A)</option>
+                <option value="contractAmountTL_asc">Sözleşme Bedeli (Artan)</option>
+                <option value="contractAmountTL_desc">Sözleşme Bedeli (Azalan)</option>
+            </select>
+            <button class="button" id="resetFilters">Filtreleri Sıfırla</button>
+        </div>
+
+        <div class="project-table-container">
+            <table class="project-table">
+                <thead>
+                    <tr>
+                        <th>Proje Adı</th>
+                        <th>Müşteri</th>
+                        <th>Kategoriler</th>
+                        <th>Durum</th>
+                        <th>Sözleşme Bedeli (TL)</th>
+                        <th>İşlemler</th>
+                    </tr>
+                </thead>
+                <tbody id="projectListBody">
+                    </tbody>
+            </table>
         </div>
     </div>
 
@@ -114,18 +280,35 @@
         firebase.initializeApp(firebaseConfig);
 
         const auth = firebase.auth();
+        const db = firebase.firestore(); // Firestore servisini tanımla
+
         const userEmailSpan = document.getElementById('userEmail');
         const logoutButton = document.getElementById('logoutButton');
         const systemMessageDiv = document.getElementById('systemMessage');
+        const addProjectForm = document.getElementById('addProjectForm');
+        const projectListBody = document.getElementById('projectListBody');
+
+        const filterStatus = document.getElementById('filterStatus');
+        const filterCategory = document.getElementById('filterCategory');
+        const sortBy = document.getElementById('sortBy');
+        const resetFiltersButton = document.getElementById('resetFilters');
+
+        let currentUserId = null; // Mevcut kullanıcı ID'sini saklamak için
 
         // Kullanıcı giriş durumunu izle
         auth.onAuthStateChanged(user => {
             if (user) {
                 // Kullanıcı giriş yapmış
+                currentUserId = user.uid; // Kullanıcı ID'sini kaydet
                 userEmailSpan.textContent = user.email;
                 systemMessageDiv.textContent = 'Giriş başarılı! Projelerinizi buradan yönetebilirsiniz.';
                 systemMessageDiv.style.backgroundColor = '#d4edda';
                 systemMessageDiv.style.color = '#155724';
+                systemMessageDiv.style.display = 'block'; // Mesajı göster
+
+                // Kullanıcı giriş yaptığında projeleri listelemeye başla
+                loadProjects();
+
             } else {
                 // Kullanıcı giriş yapmamış, giriş sayfasına yönlendir
                 window.location.href = 'auth.html';
@@ -140,10 +323,183 @@
                 // Çıkış yaptıktan sonra otomatik olarak auth.html'ye yönlendirilecek
             } catch (error) {
                 console.error('Çıkış yaparken hata oluştu:', error.message);
-                systemMessageDiv.textContent = 'Çıkış yaparken hata oluştu: ' + error.message;
-                systemMessageDiv.style.backgroundColor = '#f8d7da';
-                systemMessageDiv.style.color = '#721c24';
+                showSystemMessage('Çıkış yaparken hata oluştu: ' + error.message, true);
             }
+        });
+
+        // Sistem mesajlarını gösteren yardımcı fonksiyon
+        function showSystemMessage(message, isError = false) {
+            systemMessageDiv.textContent = message;
+            systemMessageDiv.className = 'message'; // Tüm sınıfları sıfırla
+            if (isError) {
+                systemMessageDiv.classList.add('error-message');
+            } else {
+                systemMessageDiv.classList.add('message');
+                systemMessageDiv.style.backgroundColor = '#d4edda';
+                systemMessageDiv.style.color = '#155724';
+            }
+            systemMessageDiv.style.display = 'block';
+            setTimeout(() => {
+                systemMessageDiv.style.display = 'none';
+            }, 5000); // 5 saniye sonra gizle
+        }
+
+        // Yeni Proje Ekle Formu Gönderimi
+        addProjectForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const projectName = document.getElementById('projectName').value;
+            const customerName = document.getElementById('customerName').value;
+            const selectedCategories = Array.from(document.querySelectorAll('input[name="projectCategory"]:checked'))
+                                            .map(cb => cb.value);
+
+            if (!projectName || !customerName || selectedCategories.length === 0) {
+                showSystemMessage('Lütfen tüm proje bilgilerini ve en az bir kategori seçin.', true);
+                return;
+            }
+
+            try {
+                await db.collection('projects').add({
+                    projectName: projectName,
+                    customerName: customerName,
+                    categories: selectedCategories,
+                    status: 'Başlamadı', // Varsayılan durum
+                    contractAmountTL: 0, // Varsayılan başlangıç değeri
+                    ownerId: currentUserId, // Projeyi oluşturan kullanıcının ID'si
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp() // Sunucu zaman damgası
+                });
+
+                showSystemMessage('Proje başarıyla eklendi!');
+                addProjectForm.reset(); // Formu temizle
+                loadProjects(); // Projeleri yeniden yükle
+            } catch (error) {
+                console.error('Proje eklerken hata oluştu:', error);
+                showSystemMessage('Proje eklenirken bir hata oluştu: ' + error.message, true);
+            }
+        });
+
+        // Projeleri Firestore'dan Yükleme ve Listeleme Fonksiyonu
+        async function loadProjects() {
+            projectListBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Projeler yükleniyor...</td></tr>'; // Yükleniyor mesajı
+
+            let query = db.collection('projects');
+
+            // Admin kontrolü: Admin değilse sadece kendi projelerini görebilsin
+            // Şimdilik Admin kontrolünü atlıyoruz, tüm kullanıcılar sadece kendi projelerini görecek.
+            // Admin rolü için daha sonra Firebase Cloud Functions ile Custom Claims ayarlamamız gerekecek.
+            // Şimdilik varsayılan olarak her kullanıcı kendi projesini görecek.
+            // Bu kısım, henüz "Yönetici (Admin) Kullanıcılar: Sistemdeki tüm projeleri görebilir" özelliğini kapsamaz.
+            // Bu özellik için daha sonra Firebase Cloud Functions ile Custom Claims yönetimi yapılacaktır.
+            query = query.where('ownerId', '==', currentUserId);
+
+
+            // Filtreleme
+            const selectedStatus = filterStatus.value;
+            if (selectedStatus) {
+                query = query.where('status', '==', selectedStatus);
+            }
+
+            const selectedCategory = filterCategory.value;
+            if (selectedCategory) {
+                query = query.where('categories', 'array-contains', selectedCategory);
+            }
+
+            // Sıralama
+            const sortOption = sortBy.value;
+            switch (sortOption) {
+                case 'createdAt_asc':
+                    query = query.orderBy('createdAt', 'asc');
+                    break;
+                case 'projectName_asc':
+                    query = query.orderBy('projectName', 'asc');
+                    break;
+                case 'projectName_desc':
+                    query = query.orderBy('projectName', 'desc');
+                    break;
+                case 'contractAmountTL_asc':
+                    query = query.orderBy('contractAmountTL', 'asc');
+                    break;
+                case 'contractAmountTL_desc':
+                    query = query.orderBy('contractAmountTL', 'desc');
+                    break;
+                case 'createdAt_desc':
+                default:
+                    query = query.orderBy('createdAt', 'desc'); // Varsayılan
+                    break;
+            }
+
+
+            try {
+                const snapshot = await query.get();
+                projectListBody.innerHTML = ''; // Eski projeleri temizle
+
+                if (snapshot.empty) {
+                    projectListBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Henüz hiç proje yok.</td></tr>';
+                    return;
+                }
+
+                snapshot.forEach(doc => {
+                    const project = doc.data();
+                    const projectId = doc.id; // Belge ID'sini al
+
+                    const row = projectListBody.insertRow();
+                    row.insertCell(0).textContent = project.projectName;
+                    row.insertCell(1).textContent = project.customerName;
+                    row.insertCell(2).textContent = project.categories.join(', ');
+
+                    const statusCell = row.insertCell(3);
+                    const statusSpan = document.createElement('span');
+                    statusSpan.textContent = project.status;
+                    statusSpan.classList.add('status-badge');
+                    statusSpan.classList.add('status-' + project.status.toLowerCase().replace(/ /g, '')); // CSS sınıfı için boşlukları kaldır
+                    statusCell.appendChild(statusSpan);
+
+                    row.insertCell(4).textContent = project.contractAmountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' }); // TL formatı
+
+                    const actionsCell = row.insertCell(5);
+                    const deleteButton = document.createElement('button');
+                    deleteButton.textContent = 'Sil';
+                    deleteButton.classList.add('delete-btn');
+                    deleteButton.addEventListener('click', () => deleteProject(projectId, project.projectName));
+                    actionsCell.appendChild(deleteButton);
+
+                    // Proje adına tıklanınca detay sayfasına git (şimdilik boş)
+                    const projectNameLink = document.createElement('a');
+                    projectNameLink.href = `project-detail.html?id=${projectId}`; // Detay sayfası henüz yok, bu sadece link
+                    projectNameLink.textContent = project.projectName;
+                    row.cells[0].innerHTML = ''; // Hücre içeriğini temizle
+                    row.cells[0].appendChild(projectNameLink);
+                });
+            } catch (error) {
+                console.error('Projeler yüklenirken hata oluştu:', error);
+                projectListBody.innerHTML = '<tr><td colspan="6" style="color:red; text-align:center;">Projeler yüklenirken bir hata oluştu.</td></tr>';
+                showSystemMessage('Projeler yüklenirken bir hata oluştu: ' + error.message, true);
+            }
+        }
+
+        // Proje Silme Fonksiyonu
+        async function deleteProject(projectId, projectName) {
+            if (confirm(`"${projectName}" projesini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`)) {
+                try {
+                    await db.collection('projects').doc(projectId).delete();
+                    showSystemMessage('Proje başarıyla silindi!');
+                    loadProjects(); // Listeyi güncelle
+                } catch (error) {
+                    console.error('Proje silinirken hata oluştu:', error);
+                    showSystemMessage('Proje silinirken bir hata oluştu: ' + error.message, true);
+                }
+            }
+        }
+
+        // Filtreleme ve Sıralama olay dinleyicileri
+        filterStatus.addEventListener('change', loadProjects);
+        filterCategory.addEventListener('change', loadProjects);
+        sortBy.addEventListener('change', loadProjects);
+        resetFiltersButton.addEventListener('click', () => {
+            filterStatus.value = '';
+            filterCategory.value = '';
+            sortBy.value = 'createdAt_desc';
+            loadProjects();
         });
     </script>
 </body>
