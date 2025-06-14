@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Proje Takip Sistemi</title>
+    <title>Projelerim - Proje Takip Sistemi</title>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
@@ -17,20 +17,45 @@
             color: #333;
         }
         .container {
-            max-width: 800px;
+            max-width: 1200px; /* Daha geniş bir konteyner */
             margin: 0 auto;
             background-color: #fff;
             padding: 30px;
             border-radius: 8px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
         h1 {
             color: #0056b3;
-            text-align: center;
+            margin: 0;
         }
-        p {
-            font-size: 1.1em;
-            text-align: center;
+        .user-info {
+            font-size: 0.9em;
+            color: #555;
+        }
+        .user-info span {
+            font-weight: bold;
+            color: #007bff;
+        }
+        .logout-button {
+            padding: 8px 15px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            margin-left: 15px; /* Kullanıcı bilgisi ile arasına boşluk */
+        }
+        .logout-button:hover {
+            background-color: #c82333;
         }
         .message {
             margin-top: 20px;
@@ -41,17 +66,43 @@
             border: 1px solid #c3e6cb;
             text-align: center;
         }
+        .section-title {
+            margin-top: 40px;
+            margin-bottom: 20px;
+            color: #0056b3;
+            border-bottom: 2px solid #0056b3;
+            padding-bottom: 5px;
+        }
+        /* Geçici içerik */
+        #projectListContent {
+            min-height: 200px;
+            border: 1px dashed #ccc;
+            padding: 20px;
+            text-align: center;
+            color: #666;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Proje Takip Sistemi</h1>
-        <p>Firebase bağlantısı test ediliyor...</p>
-        <div id="firebaseStatus" class="message"></div>
+        <header>
+            <h1>Proje Takip Sistemi</h1>
+            <div>
+                <span class="user-info">Hoş geldin, <span id="userEmail"></span>!</span>
+                <button id="logoutButton" class="logout-button">Çıkış Yap</button>
+            </div>
+        </header>
+
+        <div class="message" id="systemMessage"></div>
+
+        <h2 class="section-title">Projelerim</h2>
+        <div id="projectListContent">
+            <p>Proje listesi burada görüntülenecek.</p>
+            <p>Bu kısım henüz geliştirilmedi.</p>
+        </div>
     </div>
 
     <script>
-        // Firebase yapılandırma objesi
         const firebaseConfig = {
             apiKey: "AIzaSyBNwSpbpNuQQ4nTjDAlB6izu5IgkEZxDL0",
             authDomain: "projetakip-e3a75.firebaseapp.com",
@@ -60,29 +111,38 @@
             messagingSenderId: "924120275674",
             appId: "1:924120275674:web:c8ad3d4c998333d9fd23e3"
         };
-
-        // Firebase'i başlat
         firebase.initializeApp(firebaseConfig);
 
-        // Firebase durumunu kontrol et
-        document.addEventListener('DOMContentLoaded', () => {
-            const statusDiv = document.getElementById('firebaseStatus');
+        const auth = firebase.auth();
+        const userEmailSpan = document.getElementById('userEmail');
+        const logoutButton = document.getElementById('logoutButton');
+        const systemMessageDiv = document.getElementById('systemMessage');
+
+        // Kullanıcı giriş durumunu izle
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                // Kullanıcı giriş yapmış
+                userEmailSpan.textContent = user.email;
+                systemMessageDiv.textContent = 'Giriş başarılı! Projelerinizi buradan yönetebilirsiniz.';
+                systemMessageDiv.style.backgroundColor = '#d4edda';
+                systemMessageDiv.style.color = '#155724';
+            } else {
+                // Kullanıcı giriş yapmamış, giriş sayfasına yönlendir
+                window.location.href = 'auth.html';
+            }
+        });
+
+        // Çıkış yap butonu işlevi
+        logoutButton.addEventListener('click', async () => {
             try {
-                // Sadece basit bir kontrol: app objesi oluştu mu?
-                if (firebase.app()) {
-                    statusDiv.textContent = 'Firebase başarıyla bağlandı!';
-                    statusDiv.style.backgroundColor = '#d4edda';
-                    statusDiv.style.color = '#155724';
-                } else {
-                    statusDiv.textContent = 'Firebase bağlantısı başarısız oldu.';
-                    statusDiv.style.backgroundColor = '#f8d7da';
-                    statusDiv.style.color = '#721c24';
-                }
+                await auth.signOut();
+                console.log('Kullanıcı çıkış yaptı.');
+                // Çıkış yaptıktan sonra otomatik olarak auth.html'ye yönlendirilecek
             } catch (error) {
-                statusDiv.textContent = 'Firebase bağlantısında bir hata oluştu: ' + error.message;
-                statusDiv.style.backgroundColor = '#f8d7da';
-                statusDiv.style.color = '#721c24';
-                console.error("Firebase initialization error:", error);
+                console.error('Çıkış yaparken hata oluştu:', error.message);
+                systemMessageDiv.textContent = 'Çıkış yaparken hata oluştu: ' + error.message;
+                systemMessageDiv.style.backgroundColor = '#f8d7da';
+                systemMessageDiv.style.color = '#721c24';
             }
         });
     </script>
