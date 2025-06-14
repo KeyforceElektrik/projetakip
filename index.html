@@ -304,7 +304,7 @@
                 systemMessageDiv.textContent = 'Giriş başarılı! Projelerinizi buradan yönetebilirsiniz.';
                 systemMessageDiv.style.backgroundColor = '#d4edda';
                 systemMessageDiv.style.color = '#155724';
-                systemMessageDiv.style.display = 'block'; // Mesajı göster
+                systemMessageDiv.style.display = 'block';
 
                 // Kullanıcı giriş yaptığında projeleri listelemeye başla
                 loadProjects();
@@ -465,7 +465,7 @@
 
                     // Proje adına tıklanınca detay sayfasına git (şimdilik boş)
                     const projectNameLink = document.createElement('a');
-                    projectNameLink.href = `project-detail.html?id=${projectId}`; // Detay sayfası henüz yok, bu sadece link
+                    projectNameLink.href = `pd.html?id=${projectId}`; // Detay sayfası artık pd.html
                     projectNameLink.textContent = project.projectName;
                     row.cells[0].innerHTML = ''; // Hücre içeriğini temizle
                     row.cells[0].appendChild(projectNameLink);
