@@ -7,9 +7,8 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
     <link rel="stylesheet" href="style.css">
-    </head>
+</head>
 <body>
     <div class="container">
         <header>
@@ -74,18 +73,6 @@
             </div>
         </div>
 
-        <h2 class="section-title">Rapor Grafikleri</h2>
-        <div class="chart-section">
-            <div class="chart-container">
-                <h3>Kategori Bazlı Kar/Zarar Dağılımı</h3>
-                <canvas id="categoryProfitLossChart"></canvas>
-            </div>
-            <div class="chart-container">
-                <h3>Proje Durum Dağılımı</h3>
-                <canvas id="projectStatusChart"></canvas>
-            </div>
-            </div>
-
         <h2 class="section-title">Proje Detay Tablosu</h2>
         <div class="report-table-container">
             <table class="financial-table report-table">
@@ -95,18 +82,13 @@
                         <th class="sortable" data-sort="customerName">Müşteri</th>
                         <th class="sortable" data-sort="categories">Kategoriler</th>
                         <th class="sortable" data-sort="status">Durum</th>
-                        <th class="sortable" data-sort="contractStartDate">Sözl. Başl.</th>
-                        <th class="sortable" data-sort="contractEndDate">Sözl. Bitiş</th>
                         <th class="sortable" data-sort="contractAmountTL">Sözl. Tutarı (TL)</th>
-                        <th class="sortable" data-sort="totalExpense">Toplam Harcama (TL)</th>
-                        <th class="sortable" data-sort="totalCollection">Toplam Tahsilat (TL)</th>
                         <th class="sortable" data-sort="netProfitLoss">Net Kar/Zarar (TL)</th>
                         <th class="sortable" data-sort="profitMargin">Kar Marjı (%)</th>
-                        <th class="sortable" data-sort="projectDuration">Proje Süresi (Gün)</th>
                     </tr>
                 </thead>
                 <tbody id="projectDetailTableBody">
-                    <tr><td colspan="12" style="text-align:center;">Lütfen rapor oluşturmak için tarih aralığı seçin.</td></tr>
+                    <tr><td colspan="7" style="text-align:center;">Lütfen rapor oluşturmak için tarih aralığı seçin.</td></tr>
                 </tbody>
             </table>
         </div>
@@ -119,16 +101,12 @@
                         <th class="sortable" data-sort="categoryName">Kategori</th>
                         <th class="sortable" data-sort="projectCount">Proje Sayısı</th>
                         <th class="sortable" data-sort="totalContractAmount">Toplam Sözl. Bedeli (TL)</th>
-                        <th class="sortable" data-sort="totalExpense">Toplam Harcama (TL)</th>
-                        <th class="sortable" data-sort="totalCollection">Toplam Tahsilat (TL)</th>
                         <th class="sortable" data-sort="totalNetProfitLoss">Toplam Net Kar/Zarar (TL)</th>
                         <th class="sortable" data-sort="averageProfitMargin">Ort. Kar Marjı (%)</th>
-                        <th>En Karlı Proje</th>
-                        <th>En Zararlı Proje</th>
                     </tr>
                 </thead>
                 <tbody id="categoryAnalysisTableBody">
-                    <tr><td colspan="9" style="text-align:center;">Kategori bazlı analiz raporu için tarih aralığı seçin.</td></tr>
+                    <tr><td colspan="5" style="text-align:center;">Kategori bazlı analiz raporu için tarih aralığı seçin.</td></tr>
                 </tbody>
             </table>
         </div>
@@ -190,8 +168,7 @@
         let currentUserId = null;
         let activeCategoryFilter = null; // Aktif kategori filtresi
 
-        let categoryProfitLossChart; // Chart.js grafik objesi
-        let projectStatusChart;    // Chart.js grafik objesi
+        // Chart.js grafik objeleri kaldırıldı
 
         // Kullanıcı giriş durumunu izle
         auth.onAuthStateChanged(user => {
@@ -253,7 +230,7 @@
             currentCategoryFilterStatus.style.display = 'none';
             displayProjectData(filteredProjects); // Ana filtreyi koruyarak tekrar render et
             displayCategoryAnalysis(filteredProjects);
-            updateCharts(filteredProjects); // Kategori filtresi temizlendiğinde grafikleri güncelle
+            // updateCharts(filteredProjects); // Grafikler kaldırıldığı için bu satır da kaldırıldı
         });
 
         async function loadReportData() {
@@ -265,10 +242,10 @@
 
             if (!startTimestamp || !endTimestamp) {
                 showSystemMessage('Lütfen geçerli bir başlangıç ve bitiş tarihi seçin.', true);
-                projectDetailTableBody.innerHTML = '<tr><td colspan="12" style="text-align:center;">Lütfen rapor oluşturmak için tarih aralığı seçin.</td></tr>';
-                categoryAnalysisTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Kategori bazlı analiz raporu için tarih aralığı seçin.</td></tr>';
+                projectDetailTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Lütfen rapor oluşturmak için tarih aralığı seçin.</td></tr>'; // colspan güncellendi
+                categoryAnalysisTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Kategori bazlı analiz raporu için tarih aralığı seçin.</td></tr>'; // colspan güncellendi
                 updateGeneralSummary([]); // Özeti sıfırla
-                updateCharts([]); // Grafikleri sıfırla
+                // updateCharts([]); // Grafikler kaldırıldığı için bu satır da kaldırıldı
                 resetFilterButton.style.display = 'none';
                 return;
             }
@@ -294,6 +271,9 @@
                     const reportEndDate = endTimestamp.toDate();
 
                     // Proje tarihleri yoksa veya rapor dönemiyle kesişmiyorsa atla
+                    // Not: Bu kısım, projenin kendisi seçilen tarih aralığında değilse dahi, finansal işlemler bu aralıkta olabilir diye korunuyor.
+                    // Eğer sadece sözleşme başlangıç/bitiş tarihleri filtrelemede kullanılacaksa bu mantık değiştirilebilir.
+                    // Şu anki haliyle projenin sözleşme süresi, rapor tarih aralığına denk gelmiyorsa proje listeye alınmaz.
                     if (!projectContractStartDate || !projectContractEndDate ||
                         projectContractEndDate < reportStartDate || projectContractStartDate > reportEndDate) {
                         continue; // Projeyi rapora dahil etme
@@ -307,39 +287,47 @@
                     const projectExpenses = [];
                     expensesSnapshot.forEach(expDoc => {
                         const expense = expDoc.data();
-                        projectExpenses.push(expense);
-                        totalExpense += expense.amountTL || 0;
+                        // Sadece rapor tarih aralığındaki harcamaları topla
+                        if (expense.date && expense.date.toDate() >= reportStartDate && expense.date.toDate() <= reportEndDate) {
+                             projectExpenses.push(expense);
+                             totalExpense += expense.amountTL || 0;
+                        }
+                       
                     });
 
                     const collectionsSnapshot = await db.collection('projects').doc(projectId).collection('collections').get();
                     const projectCollections = [];
                     collectionsSnapshot.forEach(colDoc => {
                         const collection = colDoc.data();
-                        projectCollections.push(collection);
-                        totalCollection += collection.amountTL || 0;
+                        // Sadece rapor tarih aralığındaki tahsilatları topla
+                        if (collection.date && collection.date.toDate() >= reportStartDate && collection.date.toDate() <= reportEndDate) {
+                            projectCollections.push(collection);
+                            totalCollection += collection.amountTL || 0;
+                        }
                     });
 
-                    const netProfitLoss = project.contractAmountTL - totalExpense;
+                    // Proje sözleşme tutarı ile harcama ve tahsilat farkını hesapla
+                    const netProfitLoss = project.contractAmountTL - totalExpense; // Sadece harcamalara göre kar/zarar hesaplanır
                     let profitMargin = 0;
                     if (project.contractAmountTL > 0) {
                         profitMargin = (netProfitLoss / project.contractAmountTL) * 100;
                     }
 
-                    // Proje süresi hesaplama (gün olarak)
-                    let projectDuration = 'N/A';
-                    if (projectContractStartDate && projectContractEndDate) {
-                        const diffTime = Math.abs(projectContractEndDate.getTime() - projectContractStartDate.getTime());
-                        projectDuration = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    }
+                    // Proje süresi hesaplama (gün olarak) - GEREKSİZ OLDUĞU İÇİN KULLANILMIYOR
+                    // let projectDuration = 'N/A';
+                    // if (projectContractStartDate && projectContractEndDate) {
+                    //     const diffTime = Math.abs(projectContractEndDate.getTime() - projectContractStartDate.getTime());
+                    //     projectDuration = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    // }
 
                     allProjectsData.push({
                         id: projectId,
                         ...project,
-                        totalExpense: totalExpense,
-                        totalCollection: totalCollection,
+                        totalExpense: totalExpense, // Bu veriyi hala özette kullanacağız
+                        totalCollection: totalCollection, // Bu veriyi hala özette kullanacağız
                         netProfitLoss: netProfitLoss,
                         profitMargin: profitMargin,
-                        projectDuration: projectDuration,
+                        // projectDuration: projectDuration, // Kaldırıldı
                         expenses: projectExpenses,
                         collections: projectCollections
                     });
@@ -349,7 +337,7 @@
                 updateGeneralSummary(filteredProjects);
                 displayProjectData(filteredProjects);
                 displayCategoryAnalysis(filteredProjects);
-                updateCharts(filteredProjects); // Veriler yüklendikten sonra grafikleri güncelle
+                // updateCharts(filteredProjects); // Grafikler kaldırıldığı için bu satır da kaldırıldı
                 showSystemMessage('Rapor başarıyla oluşturuldu.', false);
 
             } catch (error) {
@@ -370,7 +358,7 @@
                 currentCategoryFilterStatus.style.display = 'none';
             }
             displayProjectData(filteredProjects); // Yeniden çiz
-            updateCharts(filteredProjects); // Grafikleri de filtreye göre güncelle
+            // updateCharts(filteredProjects); // Grafikler kaldırıldığı için bu satır da kaldırıldı
         }
 
         // Genel Özeti Güncelleme
@@ -415,7 +403,7 @@
             projectDetailTableBody.innerHTML = ''; // Tabloyu temizle
 
             if (projects.length === 0) {
-                projectDetailTableBody.innerHTML = '<tr><td colspan="12" style="text-align:center;">Seçilen tarih aralığında ve filtreye uygun proje bulunamadı.</td></tr>';
+                projectDetailTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Seçilen tarih aralığında ve filtreye uygun proje bulunamadı.</td></tr>'; // colspan güncellendi
                 return;
             }
 
@@ -428,29 +416,23 @@
                 row.insertCell(1).textContent = project.customerName;
                 row.insertCell(2).textContent = project.categories ? project.categories.join(', ') : '';
                 row.insertCell(3).textContent = project.status;
-                row.insertCell(4).textContent = project.contractStartDate ? new Date(project.contractStartDate.toDate()).toLocaleDateString('tr-TR') : 'N/A';
-                row.insertCell(5).textContent = project.contractEndDate ? new Date(project.contractEndDate.toDate()).toLocaleDateString('tr-TR') : 'N/A';
-                row.insertCell(6).textContent = (project.contractAmountTL || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                row.insertCell(7).textContent = (project.totalExpense || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                row.insertCell(8).textContent = (project.totalCollection || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                // Sözleşme Başl./Bitiş, Proje Süresi, Toplam Harcama, Toplam Tahsilat sütunları kaldırıldı
+                row.insertCell(4).textContent = (project.contractAmountTL || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 
-                const netProfitCell = row.insertCell(9);
+                const netProfitCell = row.insertCell(5);
                 netProfitCell.textContent = (project.netProfitLoss || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 if (project.netProfitLoss < 0) netProfitCell.style.color = '#dc3545'; else netProfitCell.style.color = '#28a745';
 
-                const profitMarginCell = row.insertCell(10);
+                const profitMarginCell = row.insertCell(6);
                 profitMarginCell.textContent = `${(project.profitMargin || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
                 if (project.profitMargin < 0) profitMarginCell.style.color = '#dc3545'; else profitMarginCell.style.color = '#28a745';
 
-
-                row.insertCell(11).textContent = project.projectDuration;
-
-                // Genişletilebilir detay satırı
+                // Genişletilebilir detay satırı (harcamalar ve tahsilatlar burada kalıyor)
                 const detailRow = projectDetailTableBody.insertRow();
                 detailRow.classList.add('expanded-details');
                 detailRow.style.display = 'none'; // Varsayılan olarak gizle
                 const detailCell = detailRow.insertCell(0);
-                detailCell.colSpan = 12; // Tüm sütunları kapsa
+                detailCell.colSpan = 7; // Yeni sütun sayısına göre ayarlandı
                 
                 // Harcama ve Tahsilat iç tabloları
                 let detailsHtml = `
@@ -589,13 +571,13 @@
                 let valA = a[column];
                 let valB = b[column];
 
-                // Tarih alanları için özel dönüşüm
-                if (column.includes('Date')) {
-                    valA = a[column] ? a[column].toDate().getTime() : (direction === 'asc' ? -Infinity : Infinity); // Null tarihler için varsayılan değer
-                    valB = b[column] ? b[column].toDate().getTime() : (direction === 'asc' ? -Infinity : Infinity);
-                }
+                // Tarih alanları için özel dönüşüm - KALDIRILDIĞI İÇİN ARTIK KULLANILMAYACAK
+                // if (column.includes('Date')) {
+                //     valA = a[column] ? a[column].toDate().getTime() : (direction === 'asc' ? -Infinity : Infinity);
+                //     valB = b[column] ? b[column].toDate().getTime() : (direction === 'asc' ? -Infinity : Infinity);
+                // }
                 // String alanlar için küçük harfe çevirme
-                else if (typeof valA === 'string') {
+                if (typeof valA === 'string') {
                     valA = valA.toLowerCase();
                     valB = valB.toLowerCase();
                 }
@@ -628,13 +610,12 @@
                                 categoryName: category,
                                 projectCount: 0,
                                 totalContractAmount: 0,
-                                totalExpense: 0,
-                                totalCollection: 0,
+                                totalExpense: 0, // Bu veriyi hala iç hesaplamada ve özette kullanacağız
+                                totalCollection: 0, // Bu veriyi hala iç hesaplamada ve özette kullanacağız
                                 totalNetProfitLoss: 0,
                                 totalProfitMarginSum: 0,
                                 projectsWithContractAmount: 0,
-                                mostProfitableProject: { name: '', profit: -Infinity },
-                                leastProfitableProject: { name: '', profit: Infinity }
+                                // En karlı/zararlı proje alanları kaldırıldı
                             };
                         }
 
@@ -649,14 +630,6 @@
                             cat.totalProfitMarginSum += project.profitMargin || 0;
                             cat.projectsWithContractAmount++;
                         }
-
-                        // En karlı/zararlı proje kontrolü
-                        if (project.netProfitLoss > cat.mostProfitableProject.profit) {
-                            cat.mostProfitableProject = { name: project.projectName, profit: project.netProfitLoss };
-                        }
-                        if (project.netProfitLoss < cat.leastProfitableProject.profit) {
-                            cat.leastProfitableProject = { name: project.projectName, profit: project.netProfitLoss };
-                        }
                     });
                 }
             });
@@ -668,7 +641,7 @@
 
             categoryAnalysisTableBody.innerHTML = '';
             if (categoryData.length === 0) {
-                categoryAnalysisTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Kategori bazlı analiz için uygun veri bulunamadı.</td></tr>';
+                categoryAnalysisTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Kategori bazlı analiz için uygun veri bulunamadı.</td></tr>'; // colspan güncellendi
                 return;
             }
 
@@ -697,19 +670,16 @@
 
                 row.insertCell(1).textContent = cat.projectCount;
                 row.insertCell(2).textContent = cat.totalContractAmount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                row.insertCell(3).textContent = cat.totalExpense.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                row.insertCell(4).textContent = cat.totalCollection.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 
-                const netProfitCell = row.insertCell(5);
+                const netProfitCell = row.insertCell(3);
                 netProfitCell.textContent = cat.totalNetProfitLoss.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 if (cat.totalNetProfitLoss < 0) netProfitCell.style.color = '#dc3545'; else netProfitCell.style.color = '#28a745';
 
-                const avgMarginCell = row.insertCell(6);
+                const avgMarginCell = row.insertCell(4);
                 avgMarginCell.textContent = `${cat.averageProfitMargin.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
                 if (cat.averageProfitMargin < 0) avgMarginCell.style.color = '#dc3545'; else avgMarginCell.style.color = '#28a745';
 
-                row.insertCell(7).textContent = cat.mostProfitableProject.name ? `${cat.mostProfitableProject.name} (${cat.mostProfitableProject.profit.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })})` : 'Yok';
-                row.insertCell(8).textContent = cat.leastProfitableProject.name ? `${cat.leastProfitableProject.name} (${cat.leastProfitableProject.profit.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })})` : 'Yok';
+                // En karlı/zararlı proje sütunları kaldırıldı
             });
             
             // Kategori adına tıklama olayları
@@ -744,152 +714,8 @@
             });
         });
 
-        // Chart.js Grafikleri Güncelleme Fonksiyonu
-        function updateCharts(projects) {
-            // Kategori Bazlı Kar/Zarar Grafiği
-            const categoryProfitLossCtx = document.getElementById('categoryProfitLossChart').getContext('2d');
-            const categoryData = {};
-            projects.forEach(p => {
-                if (p.categories) {
-                    p.categories.forEach(cat => {
-                        categoryData[cat] = (categoryData[cat] || 0) + p.netProfitLoss;
-                    });
-                }
-            });
-
-            const categoryLabels = Object.keys(categoryData);
-            const categoryProfits = Object.values(categoryData);
-
-            // Renk paleti oluşturma (pozitif ve negatif kar için farklı renkler)
-            const backgroundColors = categoryProfits.map(profit => profit >= 0 ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)');
-            const borderColors = categoryProfits.map(profit => profit >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)');
-
-            if (categoryProfitLossChart) {
-                categoryProfitLossChart.destroy(); // Önceki grafiği yok et
-            }
-            categoryProfitLossChart = new Chart(categoryProfitLossCtx, {
-                type: 'bar',
-                data: {
-                    labels: categoryLabels,
-                    datasets: [{
-                        label: 'Net Kar/Zarar (TL)',
-                        data: categoryProfits,
-                        backgroundColor: backgroundColors,
-                        borderColor: borderColors,
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false, // Konteyner boyutuna uyum sağla
-                    plugins: {
-                        legend: {
-                            display: false // Efsaneyi gizle
-                        },
-                        title: {
-                            display: true,
-                            text: 'Kategori Bazlı Net Kar/Zarar',
-                            font: {
-                                size: 16
-                            }
-                        },
-                        tooltip: { // Tooltip formatlaması
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) {
-                                        label += ': ';
-                                    }
-                                    if (context.parsed.y !== null) {
-                                        label += context.parsed.y.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                                    }
-                                    return label;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                callback: function(value, index, values) {
-                                    return value.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 });
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-
-
-            // Proje Durum Dağılım Grafiği
-            const projectStatusCtx = document.getElementById('projectStatusChart').getContext('2d');
-            const statusCounts = {};
-            projects.forEach(p => {
-                statusCounts[p.status] = (statusCounts[p.status] || 0) + 1;
-            });
-
-            const statusLabels = Object.keys(statusCounts);
-            const statusValues = Object.values(statusCounts);
-
-            const statusColors = {
-                'Başlamadı': '#6c757d', // Gri
-                'Devam Ediyor': '#007bff', // Mavi
-                'Takip Ediliyor': '#ffc107', // Sarı
-                'Tamamlandı': '#28a745' // Yeşil
-            };
-
-            const statusBackgroundColors = statusLabels.map(label => statusColors[label] || '#cccccc');
-
-            if (projectStatusChart) {
-                projectStatusChart.destroy(); // Önceki grafiği yok et
-            }
-            projectStatusChart = new Chart(projectStatusCtx, {
-                type: 'doughnut', // Pie yerine Doughnut daha şık olabilir
-                data: {
-                    labels: statusLabels,
-                    datasets: [{
-                        label: 'Proje Sayısı',
-                        data: statusValues,
-                        backgroundColor: statusBackgroundColors,
-                        borderColor: '#ffffff', // Beyaz çerçeve
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'right', // Efsaneyi sağda göster
-                            labels: {
-                                font: {
-                                    size: 14
-                                }
-                            }
-                        },
-                        title: {
-                            display: true,
-                            text: 'Proje Durum Dağılımı',
-                            font: {
-                                size: 16
-                            }
-                        },
-                        tooltip: { // Tooltip formatlaması
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.parsed || 0;
-                                    const total = context.dataset.data.reduce((sum, current) => sum + current, 0);
-                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                                    return `${label}: ${value} (${percentage}%)`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        }
+        // Chart.js Grafikleri Güncelleme Fonksiyonu - TAMAMEN KALDIRILDI
+        // function updateCharts(projects) { ... }
     </script>
 </body>
 </html>
