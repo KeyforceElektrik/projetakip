@@ -12,12 +12,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Firebase Auth referansı
     const auth = firebase.auth();
 
-    // Firebase Auth durumunda bir değişiklik olduğunda dinle
+    // Sayfa yüklendiğinde kullanıcının giriş yapıp yapmadığını kontrol et
+    // Bu kısım auth.html özelindedir. Eğer kullanıcı zaten giriş yapmışsa, onu yönlendir.
     auth.onAuthStateChanged(user => {
         if (user) {
             // Kullanıcı zaten giriş yapmışsa, onu proje listesi sayfasına yönlendir
-            window.location.href = 'index.html'; // index.html henüz proje listesi değil, ama şimdilik oraya yönlendirelim
+            window.location.href = 'index.html';
         }
+        // Eğer kullanıcı giriş yapmamışsa, bu sayfada kalır (auth.html)
     });
 
     // Giriş/Kayıt modunu değiştirme
@@ -48,7 +50,9 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 await auth.signInWithEmailAndPassword(email, password);
                 console.log('Kullanıcı giriş yaptı!');
-                window.location.href = 'index.html'; // Başarılı girişte index.html'ye yönlendir
+                // Başarılı girişte index.html'ye yönlendirme, onAuthStateChanged tarafından halledilecek.
+                // Bu yüzden burada manuel yönlendirmeye gerek yok, ama yine de bırakabiliriz.
+                window.location.href = 'index.html'; 
             } catch (error) {
                 console.error('Giriş hatası:', error.message);
                 errorMessageDiv.textContent = 'Giriş başarısız: ' + getTurkishErrorMessage(error.code);
@@ -58,8 +62,8 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 await auth.createUserWithEmailAndPassword(email, password);
                 console.log('Yeni kullanıcı kaydedildi!');
-                // Başarılı kayıttan sonra doğrudan giriş yapılmış kabul edilebilir
-                window.location.href = 'index.html'; // Başarılı kayıtta index.html'ye yönlendir
+                // Başarılı kayıtta index.html'ye yönlendirme, onAuthStateChanged tarafından halledilecek.
+                window.location.href = 'index.html'; 
             } catch (error) {
                 console.error('Kayıt hatası:', error.message);
                 errorMessageDiv.textContent = 'Kayıt başarısız: ' + getTurkishErrorMessage(error.code);
