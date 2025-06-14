@@ -360,7 +360,7 @@
                         <th>Açıklama</th>
                         <th>Miktar</th>
                         <th>P.B.</th>
-                        <th>Tutar (TL)</th>
+                        <th>Kur</th> <th>Tutar (TL)</th>
                         <th>Tarih</th>
                         <th>İşlemler</th>
                     </tr>
@@ -437,7 +437,7 @@
                         <th>Vade Tarihi</th>
                         <th>Miktar</th>
                         <th>P.B.</th>
-                        <th>Tutar (TL)</th>
+                        <th>Kur</th> <th>Tutar (TL)</th>
                         <th>İşlemler</th>
                     </tr>
                 </thead>
@@ -466,7 +466,7 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
 
-        // ** BURAYA KENDİ CLOUD FUNCTION URL'İNİ YAPIŞTIR! **
+        // ** CLOUD FUNCTION URL'İN BURADA! **
         const EXCHANGE_RATE_FUNCTION_URL = 'https://us-central1-projetakip-e3a75.cloudfunctions.net/getExchangeRate'; 
 
         const userEmailSpan = document.getElementById('userEmail');
@@ -492,34 +492,34 @@
         const totalExpenseSpan = document.getElementById('totalExpense');
         const totalCollectionSpan = document.getElementById('totalCollection');
         const overallBalanceSpan = document.getElementById('overallBalance');
-        const realizedProfitSpan = document.getElementById('realizedProfit'); // Yeni
-        const realizedProfitMarginSpan = document.getElementById('realizedProfitMargin'); // Yeni
+        const realizedProfitSpan = document.getElementById('realizedProfit'); 
+        const realizedProfitMarginSpan = document.getElementById('realizedProfitMargin'); 
         const remainingBalanceFromContractSpan = document.getElementById('remainingBalanceFromContract');
 
         const addExpenseForm = document.getElementById('addExpenseForm');
         const expenseListBody = document.getElementById('expenseListBody');
-        const expenseAmountInput = document.getElementById('expenseAmount'); // Yeni
-        const expenseCurrencySelect = document.getElementById('expenseCurrencySelect'); // Yeni
+        const expenseAmountInput = document.getElementById('expenseAmount'); 
+        const expenseCurrencySelect = document.getElementById('expenseCurrencySelect'); 
 
         const addCollectionForm = document.getElementById('addCollectionForm');
         const collectionListBody = document.getElementById('collectionListBody');
-        const collectionAmountInput = document.getElementById('collectionAmount'); // Yeni
-        const collectionCurrencySelect = document.getElementById('collectionCurrencySelect'); // Yeni
-        const collectionTypeSelect = document.getElementById('collectionType'); // Yeni
-        const checkDetailsDiv = document.getElementById('checkDetails'); // Yeni
-        const checkDueDateInput = document.getElementById('checkDueDate'); // Yeni
-        const checkNumberInput = document.getElementById('checkNumber'); // Yeni
-        const checkBankInput = document.getElementById('checkBank'); // Yeni
-        const barterDetailsDiv = document.getElementById('barterDetails'); // Yeni
-        const barterAssetInput = document.getElementById('barterAsset'); // Yeni
-        const barterValueTLInput = document.getElementById('barterValueTL'); // Yeni
+        const collectionAmountInput = document.getElementById('collectionAmount'); 
+        const collectionCurrencySelect = document.getElementById('collectionCurrencySelect'); 
+        const collectionTypeSelect = document.getElementById('collectionType'); 
+        const checkDetailsDiv = document.getElementById('checkDetails'); 
+        const checkDueDateInput = document.getElementById('checkDueDate'); 
+        const checkNumberInput = document.getElementById('checkNumber'); 
+        const checkBankInput = document.getElementById('checkBank'); 
+        const barterDetailsDiv = document.getElementById('barterDetails'); 
+        const barterAssetInput = document.getElementById('barterAsset'); 
+        const barterValueTLInput = document.getElementById('barterValueTL'); 
 
         const expenseDateInput = document.getElementById('expenseDate');
         const collectionDateInput = document.getElementById('collectionDate');
 
         let currentProjectId = null;
         let currentUserId = null;
-        let currentContractAmountTL = 0; // TL karşılığını tutacak
+        let currentContractAmountTL = 0; 
 
         // URL'den proje ID'sini al
         const urlParams = new URLSearchParams(window.location.search);
@@ -545,8 +545,8 @@
                 collectionDateInput.value = todayFormatted;
 
                 if (currentProjectId) {
-                    loadProjectDetails(currentProjectId); // Proje detaylarını yükle
-                    loadFinancialData(currentProjectId);  // Finansal verileri yükle
+                    loadProjectDetails(currentProjectId); 
+                    loadFinancialData(currentProjectId);  
                 } else {
                     showSystemMessage('Proje ID\'si bulunamadı. Lütfen ana sayfadan bir proje seçin.', true);
                     setTimeout(() => { window.location.href = 'index.html'; }, 3000);
@@ -585,7 +585,7 @@
 
         // TCMB'den kur çeken fonksiyon
         async function getExchangeRate(date, currency) {
-            if (currency === 'TRY') return 1; // TL için kur 1'dir
+            if (currency === 'TRY') return 1; 
             
             try {
                 const response = await fetch(EXCHANGE_RATE_FUNCTION_URL, {
@@ -670,6 +670,7 @@
             }
 
             let amountTL = originalAmount;
+            let exchangeRate = 1; // Varsayılan olarak 1 (TRY için)
             if (currency !== 'TRY') {
                 const rate = await getExchangeRate(startDate || new Date().toISOString().split('T')[0], currency); // Eğer tarih girilmediyse bugünün tarihini kullan
                 if (rate === null) {
@@ -677,6 +678,7 @@
                     return;
                 }
                 amountTL = originalAmount * rate;
+                exchangeRate = rate; // Kur değerini kaydet
             }
 
             try {
@@ -684,6 +686,7 @@
                     contractAmount: originalAmount,
                     contractCurrency: currency,
                     contractAmountTL: amountTL,
+                    contractExchangeRate: exchangeRate, // Yeni: Sözleşme için de kur bilgisini kaydet
                     contractStartDate: startDate ? firebase.firestore.Timestamp.fromDate(new Date(startDate)) : null,
                     contractEndDate: endDate ? firebase.firestore.Timestamp.fromDate(new Date(endDate)) : null,
                 });
@@ -696,6 +699,7 @@
                 showSystemMessage('Sözleşme bilgileri güncellenirken bir hata oluştu: ' + error.message, true);
             }
         });
+
 
         // Durum butonlarına tıklama olayı
         statusButtons.forEach(button => {
@@ -742,18 +746,19 @@
                 const expenseSnapshot = await db.collection('projects').doc(projectId).collection('expenses').orderBy('createdAt', 'desc').get();
                 expenseListBody.innerHTML = '';
                 if (expenseSnapshot.empty) {
-                    expenseListBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Henüz hiç harcama yok.</td></tr>';
+                    expenseListBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Henüz hiç harcama yok.</td></tr>'; 
                 } else {
                     expenseSnapshot.forEach(doc => {
                         const expense = doc.data();
-                        totalExpense += expense.amountTL; // TL karşılığı üzerinden topluyoruz
+                        totalExpense += expense.amountTL; 
                         const row = expenseListBody.insertRow();
                         row.insertCell(0).textContent = expense.description;
                         row.insertCell(1).textContent = expense.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         row.insertCell(2).textContent = expense.currency;
-                        row.insertCell(3).textContent = expense.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                        row.insertCell(4).textContent = expense.date ? new Date(expense.date.toDate()).toLocaleDateString('tr-TR') : 'N/A';
-                        const actionsCell = row.insertCell(5);
+                        row.insertCell(3).textContent = expense.exchangeRate ? expense.exchangeRate.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) : '-';
+                        row.insertCell(4).textContent = expense.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                        row.insertCell(5).textContent = expense.date ? new Date(expense.date.toDate()).toLocaleDateString('tr-TR') : 'N/A';
+                        const actionsCell = row.insertCell(6); 
                         const deleteBtn = document.createElement('button');
                         deleteBtn.textContent = 'Sil';
                         deleteBtn.classList.add('delete-btn');
@@ -771,11 +776,11 @@
                 const collectionSnapshot = await db.collection('projects').doc(projectId).collection('collections').orderBy('createdAt', 'desc').get();
                 collectionListBody.innerHTML = '';
                 if (collectionSnapshot.empty) {
-                    collectionListBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Henüz hiç tahsilat yok.</td></tr>';
+                    collectionListBody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Henüz hiç tahsilat yok.</td></tr>'; 
                 } else {
                     collectionSnapshot.forEach(doc => {
                         const collection = doc.data();
-                        totalCollection += collection.amountTL; // TL karşılığı üzerinden topluyoruz
+                        totalCollection += collection.amountTL; 
                         const row = collectionListBody.insertRow();
                         row.insertCell(0).textContent = collection.date ? new Date(collection.date.toDate()).toLocaleDateString('tr-TR') : 'N/A';
                         row.insertCell(1).textContent = collection.type || 'N/A';
@@ -792,15 +797,17 @@
                         let amountDisplay = collection.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         if (collection.type === 'Barter') {
                             amountDisplay = collection.barterValueTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                            row.insertCell(4).textContent = amountDisplay; // Barter için direkt TL değeri göster
-                            row.insertCell(5).textContent = 'TRY'; // Barter için P.B. 'TRY'
+                            row.insertCell(4).textContent = amountDisplay; 
+                            row.insertCell(5).textContent = 'TRY'; 
+                            row.insertCell(6).textContent = '-'; 
                         } else {
                              row.insertCell(4).textContent = amountDisplay;
                              row.insertCell(5).textContent = collection.currency;
+                             row.insertCell(6).textContent = collection.exchangeRate ? collection.exchangeRate.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) : '-';
                         }
 
-                        row.insertCell(6).textContent = collection.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                        const actionsCell = row.insertCell(7);
+                        row.insertCell(7).textContent = collection.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' }); 
+                        const actionsCell = row.insertCell(8); 
                         const deleteBtn = document.createElement('button');
                         deleteBtn.textContent = 'Sil';
                         deleteBtn.classList.add('delete-btn');
@@ -860,6 +867,7 @@
             }
 
             let amountTL = amount;
+            let exchangeRate = 1; 
             if (currency !== 'TRY') {
                 const rate = await getExchangeRate(date, currency);
                 if (rate === null) {
@@ -867,29 +875,30 @@
                     return;
                 }
                 amountTL = amount * rate;
+                exchangeRate = rate; 
             }
 
             try {
                 await db.collection('projects').doc(currentProjectId).collection('expenses').add({
                     description: description,
-                    amount: amount, // Orijinal miktar
-                    currency: currency, // Orijinal para birimi
-                    amountTL: amountTL, // TL karşılığı
+                    amount: amount, 
+                    currency: currency, 
+                    amountTL: amountTL, 
+                    exchangeRate: exchangeRate, 
                     date: firebase.firestore.Timestamp.fromDate(new Date(date)),
                     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                     ownerId: currentUserId
                 });
                 showSystemMessage('Harcama başarıyla eklendi!');
                 addExpenseForm.reset();
-                // Tarih inputunu bugüne sıfırla
                 const today = new Date();
                 const year = today.getFullYear();
                 const month = String(today.getMonth() + 1).padStart(2, '0');
                 const day = String(today.getDate()).padStart(2, '0');
                 expenseDateInput.value = `${year}-${month}-${day}`;
-                expenseCurrencySelect.value = 'TRY'; // Para birimini sıfırla
+                expenseCurrencySelect.value = 'TRY'; 
 
-                loadFinancialData(currentProjectId); // Verileri tekrar yükle
+                loadFinancialData(currentProjectId); 
 
             } catch (error) {
                 console.error('Harcama eklerken hata:', error);
@@ -942,36 +951,41 @@
                 }
             }
 
-            if (!description || isNaN(amount) || amount <= 0 || !date || !type) {
-                // Barter tipi için amount boş olabilir, barterValueTL kullanılır
-                if (type === 'Barter' && (!barterAsset || isNaN(barterValueTL) || barterValueTL <= 0)) {
-                    showSystemMessage('Lütfen geçerli tahsilat bilgileri girin.', true);
+            // Miktar kontrolü: Barter tipi için amount boş olabilir, barterValueTL kullanılır
+            if (type === 'Barter') {
+                if (!barterAsset || isNaN(barterValueTL) || barterValueTL <= 0) {
+                    showSystemMessage('Lütfen geçerli barter bilgileri girin (Varlık ve Değer TL).', true);
                     return;
-                } else if (type !== 'Barter' && (!description || isNaN(amount) || amount <= 0 || !date || !type)) {
-                     showSystemMessage('Lütfen geçerli tahsilat bilgileri girin.', true);
+                }
+            } else { // Nakit, Banka Transferi, Çek için miktar ve açıklama kontrolü
+                if (!description || isNaN(amount) || amount <= 0 || !date || !type) {
+                     showSystemMessage('Lütfen geçerli tahsilat bilgileri girin (Açıklama, Miktar, Tarih, Tip).', true);
                     return;
                 }
             }
 
-
             let amountTL = amount;
-            if (currency !== 'TRY' && type !== 'Barter') { // Barter için kur çekmeye gerek yok, direkt TL değeri giriliyor
+            let exchangeRate = 1; 
+            if (currency !== 'TRY' && type !== 'Barter') { 
                 const rate = await getExchangeRate(date, currency);
                 if (rate === null) {
                     showSystemMessage('Tahsilat için kur bilgisi alınamadı. Lütfen tekrar deneyin.', true);
                     return;
                 }
                 amountTL = amount * rate;
+                exchangeRate = rate; 
             } else if (type === 'Barter') {
-                amountTL = barterValueTL; // Barter için direkt girilen TL değerini kullan
+                amountTL = barterValueTL; 
+                exchangeRate = null; // Barter için kur bilgisi olmayacak
             }
 
             try {
                 const collectionData = {
                     description: description,
-                    amount: amount, // Orijinal miktar (barter için 0 veya girilen barter değeri olabilir)
-                    currency: currency, // Orijinal para birimi
-                    amountTL: amountTL, // TL karşılığı (barter için barterValueTL)
+                    amount: amount, 
+                    currency: currency, 
+                    amountTL: amountTL, 
+                    exchangeRate: exchangeRate, 
                     date: firebase.firestore.Timestamp.fromDate(new Date(date)),
                     type: type,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -988,23 +1002,25 @@
                 if (type === 'Barter') {
                     collectionData.barterAsset = barterAsset;
                     collectionData.barterValueTL = barterValueTL;
+                    // Barter durumunda 'amount' alanı boş veya anlamsız olabileceği için kaldırabiliriz
+                    // Ancak FireStore'a null veya 0 olarak kaydedilmesi de sorun yaratmaz.
+                    // collectionData.amount = 0; // İsteğe bağlı olarak bu satırı ekleyebilirsin
                 }
 
                 await db.collection('projects').doc(currentProjectId).collection('collections').add(collectionData);
                 showSystemMessage('Tahsilat başarıyla eklendi!');
                 addCollectionForm.reset();
-                // Tarih inputlarını bugüne sıfırla
                 const today = new Date();
                 const year = today.getFullYear();
                 const month = String(today.getMonth() + 1).padStart(2, '0');
                 const day = String(today.getDate()).padStart(2, '0');
                 collectionDateInput.value = `${year}-${month}-${day}`;
                 collectionCurrencySelect.value = 'TRY';
-                collectionTypeSelect.value = ''; // Tipi sıfırla
-                checkDetailsDiv.style.display = 'none'; // Çek ve barter detaylarını gizle
+                collectionTypeSelect.value = ''; 
+                checkDetailsDiv.style.display = 'none'; 
                 barterDetailsDiv.style.display = 'none';
 
-                loadFinancialData(currentProjectId); // Verileri tekrar yükle
+                loadFinancialData(currentProjectId); 
 
             } catch (error) {
                 console.error('Tahsilat eklerken hata:', error);
@@ -1012,16 +1028,16 @@
             }
         });
 
-        // Finansal öğe (harcama/tahsilat) silme
-        async function deleteFinancialItem(type, itemId, description) {
-            if (confirm(`"${description}" ${type === 'expenses' ? 'harcamasını' : 'tahsilatını'} silmek istediğinizden emin misiniz?`)) {
+        // Harcama veya Tahsilat silme fonksiyonu
+        async function deleteFinancialItem(collectionName, docId, description) {
+            if (confirm(`"${description}" kaydını silmek istediğinizden emin misiniz?`)) {
                 try {
-                    await db.collection('projects').doc(currentProjectId).collection(type).doc(itemId).delete();
-                    showSystemMessage(`${type === 'expenses' ? 'Harcama' : 'Tahsilat'} başarıyla silindi!`);
-                    loadFinancialData(currentProjectId); // Verileri tekrar yükle
+                    await db.collection('projects').doc(currentProjectId).collection(collectionName).doc(docId).delete();
+                    showSystemMessage('Kayıt başarıyla silindi!');
+                    loadFinancialData(currentProjectId); // Listeyi ve özetleri güncelle
                 } catch (error) {
-                    console.error(`${type === 'expenses' ? 'Harcama' : 'Tahsilat'} silinirken hata:`, error);
-                    showSystemMessage(`${type === 'expenses' ? 'Harcama' : 'Tahsilat'} silinirken bir hata oluştu: ` + error.message, true);
+                    console.error('Kayıt silinirken hata:', error);
+                    showSystemMessage('Kayıt silinirken bir hata oluştu: ' + error.message, true);
                 }
             }
         }
