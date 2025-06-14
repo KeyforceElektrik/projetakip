@@ -220,17 +220,19 @@ h1 {
 .financial-table {
     width: 100%;
     border-collapse: collapse;
-    min-width: 900px; /* Tablonun çok daralmasını engelle, önceki 700px'den artırıldı */
+    table-layout: fixed; /* Sütun genişliklerini sabitler, taşmayı engeller */
+    min-width: 1100px; /* En az bu kadar genişlik olsun, daha fazla sütunlar için artırıldı */
 }
 
 .financial-table th, .financial-table td {
     border: 1px solid #eee;
-    padding: 12px 10px; /* Sağ-sol padding azaltıldı */
+    padding: 12px 8px; /* Sağ-sol padding azaltıldı */
     text-align: left;
-    white-space: nowrap; /* İçerik tek satırda kalsın */
-    word-break: break-word; /* Uzun kelimeleri kır */
+    white-space: normal; /* Metinler alt satıra insin */
+    word-wrap: break-word; /* Uzun kelimeleri kır */
+    overflow-wrap: break-word; /* Modern versiyon */
     overflow: hidden; /* Taşmayı gizle */
-    text-overflow: ellipsis; /* Taşmayı üç nokta ile göster */
+    text-overflow: ellipsis; /* Taşmayı üç nokta ile göster (eğer sığmazsa) */
 }
 
 .financial-table th {
@@ -242,47 +244,26 @@ h1 {
     z-index: 1;
 }
 
-/* Sayısal ve tarih sütunları için sağa hizalama */
-.financial-table td:nth-child(6), /* Sözl. Tutarı (TL) */
-.financial-table td:nth-child(7), /* Toplam Harcama (TL) */
-.financial-table td:nth-child(8), /* Toplam Tahsilat (TL) */
-.financial-table td:nth-child(9), /* Net Kar/Zarar (TL) */
-.financial-table td:nth-child(10), /* Kar Marjı (%) */
-.financial-table td:nth-child(11), /* Proje Süresi (Gün) */
-.financial-table .inner-table td:nth-child(2), /* Harcama Miktar */
-.financial-table .inner-table td:nth-child(4), /* Harcama Kur */
-.financial-table .inner-table td:nth-child(5), /* Harcama Tutar (TL) */
-.financial-table .inner-table td:nth-child(5), /* Tahsilat Miktar */
-.financial-table .inner-table td:nth-child(7), /* Tahsilat Kur */
-.financial-table .inner-table td:nth-child(8) /* Tahsilat Tutar (TL) */ {
+/* Sütun Genişlikleri için Özel Ayarlar (rapor tablosu için) */
+.report-table th:nth-child(1), .report-table td:nth-child(1) { width: 15%; } /* Proje Adı */
+.report-table th:nth-child(2), .report-table td:nth-child(2) { width: 12%; } /* Müşteri */
+.report-table th:nth-child(3), .report-table td:nth-child(3) { width: 10%; } /* Kategoriler */
+.report-table th:nth-child(4), .report-table td:nth-child(4) { width: 8%; } /* Durum */
+.report-table th:nth-child(5), .report-table td:nth-child(5) { width: 9%; } /* Sözl. Başl. */
+.report-table th:nth-child(6), .report-table td:nth-child(6) { width: 9%; } /* Sözl. Bitiş */
+.report-table th:nth-child(7), .report-table td:nth-child(7) { width: 10%; text-align: right; } /* Sözl. Tutarı (TL) */
+.report-table th:nth-child(8), .report-table td:nth-child(8) { width: 10%; text-align: right; } /* Toplam Harcama (TL) */
+.report-table th:nth-child(9), .report-table td:nth-child(9) { width: 10%; text-align: right; } /* Toplam Tahsilat (TL) */
+.report-table th:nth-child(10), .report-table td:nth-child(10) { width: 10%; text-align: right; } /* Net Kar/Zarar (TL) */
+.report-table th:nth-child(11), .report-table td:nth-child(11) { width: 8%; text-align: right; } /* Kar Marjı (%) */
+.report-table th:nth-child(12), .report-table td:nth-child(12) { width: 7%; text-align: right; } /* Proje Süresi (Gün) */
+
+
+/* Sayısal ve tarih sütunları için sağa hizalama (genel finansal tablo için) */
+.financial-table td:not(:nth-child(1)):not(:nth-child(2)):not(:nth-child(3)):not(:nth-child(4)):not(:nth-child(5)):not(:nth-child(6)) {
     text-align: right;
 }
-
-/* Tarih sütunları için min-width */
-.financial-table th:nth-child(5), /* Sözl. Başl. */
-.financial-table td:nth-child(5),
-.financial-table th:nth-child(6), /* Sözl. Bitiş */
-.financial-table td:nth-child(6),
-.financial-table .inner-table th:nth-child(6), /* Harcama Tarih */
-.financial-table .inner-table td:nth-child(6),
-.financial-table .inner-table th:nth-child(1), /* Tahsilat Tarih */
-.financial-table .inner-table td:nth-child(1),
-.financial-table .inner-table th:nth-child(4), /* Tahsilat Vade Tarihi */
-.financial-table .inner-table td:nth-child(4) {
-    min-width: 100px;
-}
-
-/* Para birimi, kur sütunları için min-width */
-.financial-table .inner-table th:nth-child(3), /* Harcama P.B. */
-.financial-table .inner-table td:nth-child(3),
-.financial-table .inner-table th:nth-child(4), /* Harcama Kur */
-.financial-table .inner-table td:nth-child(4),
-.financial-table .inner-table th:nth-child(6), /* Tahsilat P.B. */
-.financial-table .inner-table td:nth-child(6),
-.financial-table .inner-table th:nth-child(7), /* Tahsilat Kur */
-.financial-table .inner-table td:nth-child(7) {
-    min-width: 60px; /* Daha dar sütunlar */
-}
+/* Ancak rapor tablosu için yukarıdaki özel width ile birlikte text-align sağladık. */
 
 
 .financial-table tbody tr:nth-child(even) {
@@ -485,232 +466,6 @@ h1 {
         width: 100%;
     }
 
-    .button {
-        width: 100%;
-        box-sizing: border-box;
-    }
-}
-
-@media (max-width: 480px) {
-    .container {
-        padding: 15px 20px;
-    }
-
-    h1 {
-        font-size: 1.6em;
-    }
-
-    .section-title {
-        font-size: 1.3em;
-    }
-
-    .summary-item p {
-        font-size: 1.5em;
-    }
-}
-
-
-/* Rapor sayfasına özel ek stiller (rapor.html'den buraya taşındı ve güncellendi) */
-.report-filter-section {
-    display: flex;
-    gap: 20px;
-    margin-bottom: 30px;
-    padding: 20px;
-    background-color: #f8f9fa;
-    border-radius: 8px;
-    align-items: flex-end; /* Butonu inputlarla hizala */
-    flex-wrap: wrap; /* Küçük ekranlarda alt alta geçsin */
-}
-.report-filter-section .form-group {
-    margin-bottom: 0; /* İçindeki form-group'ların alt boşluğunu sıfırla */
-    flex: 1; /* Eşit genişlikte dağılsınlar */
-    min-width: 180px; /* Minimum genişlik */
-}
-.report-filter-section button {
-    flex-shrink: 0; /* Buton daralmasın */
-}
-
-.report-summary-box {
-    background-color: #e6f7ff; /* Daha açık mavi, rapor özeti için */
-    padding: 25px;
-    border-radius: 10px;
-    margin-bottom: 30px;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); /* Esnek sütunlar */
-    gap: 20px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-}
-.report-summary-item {
-    text-align: center;
-    background-color: #ffffff;
-    padding: 15px;
-    border-radius: 8px;
-    border: 1px solid #cce5ff;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
-}
-.report-summary-item h3 {
-    margin-top: 0;
-    font-size: 1.1em;
-    color: #0056b3;
-    margin-bottom: 5px;
-}
-.report-summary-item p {
-    font-size: 1.8em;
-    font-weight: 700;
-    color: #28a745;
-    margin: 0;
-}
-.report-summary-item.negative p {
-    color: #dc3545;
-}
-
-/* Rapor tablosu özel stiller */
-.report-table-container {
-    margin-bottom: 30px;
-}
-.report-table th.sortable {
-    cursor: pointer;
-    position: relative;
-}
-.report-table th.sortable::after {
-    content: '';
-    display: inline-block;
-    width: 0;
-    height: 0;
-    margin-left: 8px;
-    vertical-align: middle;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-}
-.report-table th.sortable.asc::after {
-    border-bottom: 5px solid #333;
-}
-.report-table th.sortable.desc::after {
-    border-top: 5px solid #333;
-}
-.report-table tr.expandable-row {
-    cursor: pointer;
-    background-color: #f9f9f9;
-}
-.report-table tr.expandable-row:hover {
-    background-color: #f0f8ff;
-}
-.report-table tr.expanded-details td {
-    padding: 10px 20px;
-    background-color: #f0f4f7; /* Açık mavi ton */
-    border-bottom: 1px solid #e0e0e0;
-}
-.expanded-details .inner-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 10px;
-}
-.expanded-details .inner-table th,
-.expanded-details .inner-table td {
-    border: 1px solid #e9ecef;
-    padding: 8px 10px;
-    text-align: left;
-    font-size: 0.9em;
-    white-space: normal; /* İç tablo hücrelerinde metin kırılsın */
-    word-break: break-word; /* Uzun kelimeleri kır */
-}
-.expanded-details .inner-table th {
-    background-color: #e2e8ed;
-    font-weight: 600;
-}
-
-/* Inner table currency/number alignments */
-.expanded-details .inner-table td:nth-child(2), /* Harcama Miktar */
-.expanded-details .inner-table td:nth-child(4), /* Harcama Kur */
-.expanded-details .inner-table td:nth-child(5), /* Harcama Tutar (TL) */
-.expanded-details .inner-table td:nth-child(5), /* Tahsilat Miktar */
-.expanded-details .inner-table td:nth-child(7), /* Tahsilat Kur */
-.expanded-details .inner-table td:nth-child(8) /* Tahsilat Tutar (TL) */ {
-    text-align: right;
-}
-
-/* Category Analysis Table Specific Styles */
-.category-analysis-table th.sortable {
-    cursor: pointer;
-    position: relative;
-}
-.category-analysis-table th.sortable::after {
-    content: '';
-    display: inline-block;
-    width: 0;
-    height: 0;
-    margin-left: 8px;
-    vertical-align: middle;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-}
-.category-analysis-table th.sortable.asc::after {
-    border-bottom: 5px solid #333;
-}
-.category-analysis-table th.sortable.desc::after {
-    border-top: 5px solid #333;
-}
-.category-analysis-table td.category-name {
-    cursor: pointer;
-    color: #007bff;
-    text-decoration: underline;
-}
-.category-analysis-table td.category-name:hover {
-    color: #0056b3;
-}
-
-.filter-status {
-    text-align: center;
-    margin-bottom: 20px;
-    font-size: 1.1em;
-    font-weight: bold;
-    color: #34495e;
-    display: none; /* Varsayılan olarak gizli */
-}
-.filter-status button {
-    margin-left: 15px;
-    padding: 6px 12px;
-    background-color: #f1c40f; /* Sarı buton */
-    color: #333;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-}
-.filter-status button:hover {
-    background-color: #e6b700;
-}
-
-@media (max-width: 768px) {
-    .report-filter-section {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    .report-filter-section .form-group {
-        min-width: unset;
-        width: 100%;
-    }
-    .report-filter-section button {
-        width: 100%;
-        margin-top: 10px;
-    }
-    .report-summary-box {
-        grid-template-columns: 1fr; /* Tek sütun */
-    }
-    .report-summary-item {
-        border-right: none;
-        border-bottom: 1px solid #cce5ff;
-    }
-    .report-summary-item:last-child {
-        border-bottom: none;
-    }
-    .status-options {
-        flex-direction: column;
-    }
-    .status-options button {
-        min-width: unset;
-        width: 100%;
-    }
     .button {
         width: 100%;
         box-sizing: border-box;
