@@ -81,10 +81,16 @@
 
         .detail-item {
             margin-bottom: 10px;
+            display: flex; /* Flexbox ile hizalama */
+            align-items: center;
         }
         .detail-item strong {
             display: inline-block;
             width: 150px;
+            flex-shrink: 0; /* Küçülmesini engelle */
+        }
+        .detail-item span, .detail-item input {
+            flex-grow: 1; /* Geri kalan alanı doldur */
         }
 
         /* Form Stilleri */
@@ -208,6 +214,14 @@
         .status-options button.status-devamediyor { background-color: #007bff; }
         .status-options button.status-takipediliyor { background-color: #ffc107; color: #333; }
         .status-options button.status-tamamlandi { background-color: #28a745; }
+
+        /* Aktif durum butonu */
+        .status-options button.active-status {
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.5); /* Mavi dış gölge */
+            border: 2px solid white; /* Beyaz iç çerçeve */
+            transform: scale(1.05); /* Hafif büyütme */
+            z-index: 1;
+        }
         .status-options button:hover {
             opacity: 0.9;
         }
@@ -236,8 +250,12 @@
             <p class="detail-item"><strong>Müşteri Adı:</strong> <span id="detailCustomerName"></span></p>
             <p class="detail-item"><strong>Kategoriler:</strong> <span id="detailCategories"></span></p>
             <p class="detail-item"><strong>Oluşturulma Tarihi:</strong> <span id="detailCreatedAt"></span></p>
-            <p class="detail-item"><strong>Sözleşme Bedeli:</strong> <input type="number" id="contractAmountInput" value="0" step="0.01" style="width: 150px; padding: 5px; border-radius: 4px; border: 1px solid #ccc;"></p>
-            <button class="button secondary" id="saveContractAmountButton">Sözleşme Bedelini Kaydet</button>
+            <p class="detail-item"><strong>Sözleşme Bedeli:</strong>
+                <input type="number" id="contractAmountInput" value="0" step="0.01" style="width: 150px; padding: 5px; border-radius: 4px; border: 1px solid #ccc; margin-right: 10px;">
+                <button class="button secondary" id="saveContractAmountButton">Kaydet</button>
+                <span style="margin-left: 20px;">**Kalan Bakiye:** <strong id="remainingBalanceFromContract">0,00 TL</strong></span>
+            </p>
+
             <div class="form-group" style="margin-top: 20px;">
                 <label for="projectStatus">Proje Durumu:</label>
                 <div class="status-options">
@@ -260,8 +278,8 @@
                 <p id="totalCollection">0,00 TL</p>
             </div>
             <div class="summary-item">
-                <h3>Bakiye</h3>
-                <p id="balance" class="negative">0,00 TL</p>
+                <h3>Genel Bakiye</h3>
+                <p id="overallBalance" class="negative">0,00 TL</p>
             </div>
         </div>
 
@@ -358,19 +376,25 @@
         const detailCreatedAt = document.getElementById('detailCreatedAt');
         const contractAmountInput = document.getElementById('contractAmountInput');
         const saveContractAmountButton = document.getElementById('saveContractAmountButton');
+        const remainingBalanceFromContractSpan = document.getElementById('remainingBalanceFromContract');
         const statusButtons = document.querySelectorAll('.status-options button');
 
         const totalExpenseSpan = document.getElementById('totalExpense');
         const totalCollectionSpan = document.getElementById('totalCollection');
-        const balanceSpan = document.getElementById('balance');
+        const overallBalanceSpan = document.getElementById('overallBalance'); // Adı 'balance' yerine 'overallBalance' oldu
 
         const addExpenseForm = document.getElementById('addExpenseForm');
         const expenseListBody = document.getElementById('expenseListBody');
         const addCollectionForm = document.getElementById('addCollectionForm');
         const collectionListBody = document.getElementById('collectionListBody');
 
+        const expenseDateInput = document.getElementById('expenseDate');
+        const collectionDateInput = document.getElementById('collectionDate');
+
+
         let currentProjectId = null;
         let currentUserId = null;
+        let currentContractAmount = 0; // Sözleşme bedelini tutacak değişken
 
         // URL'den proje ID'sini al
         const urlParams = new URLSearchParams(window.location.search);
@@ -386,12 +410,21 @@
                 systemMessageDiv.style.color = '#155724';
                 systemMessageDiv.style.display = 'block';
 
+                // Tarih inputlarına varsayılan bugünün tarihini atama
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = String(today.getMonth() + 1).padStart(2, '0'); // Ay 0-11 olduğu için +1
+                const day = String(today.getDate()).padStart(2, '0');
+                const todayFormatted = `<span class="math-inline">\{year\}\-</span>{month}-${day}`;
+                expenseDateInput.value = todayFormatted;
+                collectionDateInput.value = todayFormatted;
+
+
                 if (currentProjectId) {
                     loadProjectDetails(currentProjectId);
-                    loadFinancialData(currentProjectId);
+                    // loadFinancialData artık gerçek zamanlı dinleyici içinde çağrılacak
                 } else {
                     showSystemMessage('Proje ID\'si bulunamadı. Lütfen ana sayfadan bir proje seçin.', true);
-                    // Belki de index.html'ye geri yönlendirilebilir.
                     setTimeout(() => { window.location.href = 'index.html'; }, 3000);
                 }
 
@@ -426,58 +459,54 @@
             }, 5000);
         }
 
-        // Proje detaylarını yükleme
+        // Proje detaylarını ve finansal verileri gerçek zamanlı yükleme
         async function loadProjectDetails(projectId) {
             try {
-                const projectDoc = await db.collection('projects').doc(projectId).get();
-                if (projectDoc.exists) {
-                    const project = projectDoc.data();
-                    pageTitle.textContent = `Proje Detayları - ${project.projectName}`;
-                    projectDetailPageTitle.textContent = `Proje Detayları: ${project.projectName}`;
-                    detailProjectName.textContent = project.projectName;
-                    detailCustomerName.textContent = project.customerName;
-                    detailCategories.textContent = project.categories ? project.categories.join(', ') : 'N/A';
-                    detailCreatedAt.textContent = project.createdAt ? new Date(project.createdAt.toDate()).toLocaleDateString('tr-TR') : 'N/A';
-                    contractAmountInput.value = project.contractAmountTL || 0;
+                // Proje detayları için gerçek zamanlı dinleyici
+                db.collection('projects').doc(projectId)
+                  .onSnapshot(async docSnapshot => {
+                      if (docSnapshot.exists) {
+                          const project = docSnapshot.data();
+                          pageTitle.textContent = `Proje Detayları - ${project.projectName}`;
+                          projectDetailPageTitle.textContent = `Proje Detayları: ${project.projectName}`;
+                          detailProjectName.textContent = project.projectName;
+                          detailCustomerName.textContent = project.customerName;
+                          detailCategories.textContent = project.categories ? project.categories.join(', ') : 'N/A';
+                          detailCreatedAt.textContent = project.createdAt ? new Date(project.createdAt.toDate()).toLocaleDateString('tr-TR') : 'N/A';
 
-                    // Durum butonlarını güncelle
-                    statusButtons.forEach(button => {
-                        button.classList.remove('active-status'); // Önceki aktiflikleri kaldır
-                        if (button.dataset.status === project.status) {
-                            button.classList.add('active-status');
-                            // Butonun rengini mevcut duruma göre ayarla
-                            button.style.backgroundColor = getStatusColor(project.status);
-                        } else {
-                             // Diğer butonların rengini CSS'teki varsayılan renge döndür
-                            button.style.backgroundColor = ''; // CSS'e bırak
-                        }
-                    });
+                          // Sözleşme bedeli alanını güncelle ve mevcut değeri kaydet
+                          currentContractAmount = project.contractAmountTL || 0;
+                          contractAmountInput.value = currentContractAmount;
 
-                    // Firestore'dan gerçek zamanlı güncellemeler için listener
-                    db.collection('projects').doc(projectId)
-                      .onSnapshot(docSnapshot => {
-                          if (docSnapshot.exists) {
-                              const updatedProject = docSnapshot.data();
-                              contractAmountInput.value = updatedProject.contractAmountTL || 0;
-                              statusButtons.forEach(button => {
-                                  button.classList.remove('active-status');
-                                  if (button.dataset.status === updatedProject.status) {
-                                      button.classList.add('active-status');
-                                      button.style.backgroundColor = getStatusColor(updatedProject.status);
-                                  } else {
-                                      button.style.backgroundColor = '';
-                                  }
-                              });
-                          }
-                      });
 
-                    systemMessageDiv.style.display = 'none'; // Başarılı yükleme mesajını gizle
-                } else {
-                    showSystemMessage('Proje bulunamadı.', true);
-                    setTimeout(() => { window.location.href = 'index.html'; }, 3000);
-                }
+                          // Durum butonlarını güncelle
+                          statusButtons.forEach(button => {
+                              button.classList.remove('active-status'); // Önceki aktiflikleri kaldır
+                              if (button.dataset.status === project.status) {
+                                  button.classList.add('active-status');
+                                  // Butonun rengini mevcut duruma göre ayarla
+                                  button.style.backgroundColor = getStatusColor(project.status);
+                              } else {
+                                   // Diğer butonların rengini CSS'teki varsayılan renge döndür
+                                  button.style.backgroundColor = ''; // CSS'e bırak
+                              }
+                          });
+
+                          systemMessageDiv.style.display = 'none'; // Başarılı yükleme mesajını gizle
+
+                          // Proje bilgileri yüklendikten sonra finansal verileri yükle
+                          await loadFinancialData(projectId);
+
+                      } else {
+                          showSystemMessage('Proje bulunamadı.', true);
+                          setTimeout(() => { window.location.href = 'index.html'; }, 3000);
+                      }
+                  }, error => {
+                      console.error('Proje detayları dinlenirken hata oluştu:', error);
+                      showSystemMessage('Proje detayları yüklenirken bir hata oluştu: ' + error.message, true);
+                  });
             } catch (error) {
-                console.error('Proje detayları yüklenirken hata oluştu:', error);
+                console.error('Proje detayları yüklenirken hata oluştu (dış catch):', error);
                 showSystemMessage('Proje detayları yüklenirken bir hata oluştu: ' + error.message, true);
             }
         }
@@ -494,8 +523,8 @@
                     contractAmountTL: newAmount
                 });
                 showSystemMessage('Sözleşme bedeli güncellendi!');
-                // Finansal özet güncellenecek
-                loadFinancialData(currentProjectId);
+                // Sözleşme bedeli değiştiğinde finansal özeti yeniden hesapla
+                // loadFinancialData(currentProjectId); // onSnapshot otomatik tetikleyecek
             } catch (error) {
                 console.error('Sözleşme bedeli güncellenirken hata:', error);
                 showSystemMessage('Sözleşme bedeli güncellenirken bir hata oluştu: ' + error.message, true);
@@ -511,9 +540,7 @@
                         status: newStatus
                     });
                     showSystemMessage(`Proje durumu "${newStatus}" olarak güncellendi!`);
-                    // Aktif sınıfı güncelle
-                    statusButtons.forEach(btn => btn.classList.remove('active-status'));
-                    button.classList.add('active-status');
+                    // Aktif sınıfı güncelleme onSnapshot tarafından yapılacak
                 } catch (error) {
                     console.error('Proje durumu güncellenirken hata:', error);
                     showSystemMessage('Proje durumu güncellenirken bir hata oluştu: ' + error.message, true);
@@ -521,155 +548,4 @@
             });
         });
 
-        // Durum rengini veren yardımcı fonksiyon
-        function getStatusColor(status) {
-            switch (status) {
-                case 'Başlamadı': return '#6c757d';
-                case 'Devam Ediyor': return '#007bff';
-                case 'Takip Ediliyor': return '#ffc107'; // Sarı için renk kodu
-                case 'Tamamlandı': return '#28a745';
-                default: return '#6c757d';
-            }
-        }
-
-
-        // Finansal verileri yükleme ve özet hesaplama
-        async function loadFinancialData(projectId) {
-            let totalExpense = 0;
-            let totalCollection = 0;
-
-            expenseListBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Harcamalar yükleniyor...</td></tr>';
-            collectionListBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Tahsilatlar yükleniyor...</td></tr>';
-
-            try {
-                // Harcamaları yükle
-                const expensesSnapshot = await db.collection('projects').doc(projectId).collection('expenses').orderBy('date', 'desc').get();
-                expenseListBody.innerHTML = '';
-                if (expensesSnapshot.empty) {
-                    expenseListBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Henüz hiç harcama yok.</td></tr>';
-                } else {
-                    expensesSnapshot.forEach(doc => {
-                        const expense = doc.data();
-                        totalExpense += expense.amount;
-                        const row = expenseListBody.insertRow();
-                        row.insertCell(0).textContent = expense.description;
-                        row.insertCell(1).textContent = expense.amount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                        row.insertCell(2).textContent = expense.date ? new Date(expense.date.toDate()).toLocaleDateString('tr-TR') : 'N/A';
-                        const actionsCell = row.insertCell(3);
-                        const deleteBtn = document.createElement('button');
-                        deleteBtn.textContent = 'Sil';
-                        deleteBtn.classList.add('delete-btn');
-                        deleteBtn.addEventListener('click', () => deleteFinancialItem('expenses', doc.id, expense.description));
-                        actionsCell.appendChild(deleteBtn);
-                    });
-                }
-
-                // Tahsilatları yükle
-                const collectionsSnapshot = await db.collection('projects').doc(projectId).collection('collections').orderBy('date', 'desc').get();
-                collectionListBody.innerHTML = '';
-                if (collectionsSnapshot.empty) {
-                    collectionListBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Henüz hiç tahsilat yok.</td></tr>';
-                } else {
-                    collectionsSnapshot.forEach(doc => {
-                        const collection = doc.data();
-                        totalCollection += collection.amount;
-                        const row = collectionListBody.insertRow();
-                        row.insertCell(0).textContent = collection.description;
-                        row.insertCell(1).textContent = collection.amount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                        row.insertCell(2).textContent = collection.date ? new Date(collection.date.toDate()).toLocaleDateString('tr-TR') : 'N/A';
-                        const actionsCell = row.insertCell(3);
-                        const deleteBtn = document.createElement('button');
-                        deleteBtn.textContent = 'Sil';
-                        deleteBtn.classList.add('delete-btn');
-                        deleteBtn.addEventListener('click', () => deleteFinancialItem('collections', doc.id, collection.description));
-                        actionsCell.appendChild(deleteBtn);
-                    });
-                }
-
-                // Özetleri güncelle
-                totalExpenseSpan.textContent = totalExpense.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                totalCollectionSpan.textContent = totalCollection.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                const balance = totalCollection - totalExpense;
-                balanceSpan.textContent = balance.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                balanceSpan.className = balance >= 0 ? '' : 'negative'; // Bakiyeye göre renk
-
-            } catch (error) {
-                console.error('Finansal veriler yüklenirken hata oluştu:', error);
-                showSystemMessage('Finansal veriler yüklenirken bir hata oluştu: ' + error.message, true);
-            }
-        }
-
-        // Harcama Ekleme
-        addExpenseForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const description = document.getElementById('expenseDescription').value;
-            const amount = parseFloat(document.getElementById('expenseAmount').value);
-            const date = document.getElementById('expenseDate').value;
-
-            if (!description || isNaN(amount) || amount <= 0 || !date) {
-                showSystemMessage('Lütfen geçerli harcama bilgileri girin.', true);
-                return;
-            }
-
-            try {
-                await db.collection('projects').doc(currentProjectId).collection('expenses').add({
-                    description: description,
-                    amount: amount,
-                    date: firebase.firestore.Timestamp.fromDate(new Date(date)),
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    ownerId: currentUserId // Hangi kullanıcının eklediğini de kaydedebiliriz
-                });
-                showSystemMessage('Harcama başarıyla eklendi!');
-                addExpenseForm.reset();
-                loadFinancialData(currentProjectId); // Listeyi ve özetleri güncelle
-            } catch (error) {
-                console.error('Harcama eklerken hata:', error);
-                showSystemMessage('Harcama eklenirken bir hata oluştu: ' + error.message, true);
-            }
-        });
-
-        // Tahsilat Ekleme
-        addCollectionForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const description = document.getElementById('collectionDescription').value;
-            const amount = parseFloat(document.getElementById('collectionAmount').value);
-            const date = document.getElementById('collectionDate').value;
-
-            if (!description || isNaN(amount) || amount <= 0 || !date) {
-                showSystemMessage('Lütfen geçerli tahsilat bilgileri girin.', true);
-                return;
-            }
-
-            try {
-                await db.collection('projects').doc(currentProjectId).collection('collections').add({
-                    description: description,
-                    amount: amount,
-                    date: firebase.firestore.Timestamp.fromDate(new Date(date)),
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    ownerId: currentUserId // Hangi kullanıcının eklediğini de kaydedebiliriz
-                });
-                showSystemMessage('Tahsilat başarıyla eklendi!');
-                addCollectionForm.reset();
-                loadFinancialData(currentProjectId); // Listeyi ve özetleri güncelle
-            } catch (error) {
-                console.error('Tahsilat eklerken hata:', error);
-                showSystemMessage('Tahsilat eklenirken bir hata oluştu: ' + error.message, true);
-            }
-        });
-
-        // Finansal öğe (harcama/tahsilat) silme
-        async function deleteFinancialItem(type, itemId, description) {
-            if (confirm(`"${description}" ${type === 'expenses' ? 'harcamasını' : 'tahsilatını'} silmek istediğinizden emin misiniz?`)) {
-                try {
-                    await db.collection('projects').doc(currentProjectId).collection(type).doc(itemId).delete();
-                    showSystemMessage(`${type === 'expenses' ? 'Harcama' : 'Tahsilat'} başarıyla silindi!`);
-                    loadFinancialData(currentProjectId); // Listeyi ve özetleri güncelle
-                } catch (error) {
-                    console.error(`${type === 'expenses' ? 'Harcama' : 'Tahsilat'} silinirken hata:`, error);
-                    showSystemMessage(`${type === 'expenses' ? 'Harcama' : 'Tahsilat'} silinirken bir hata oluştu: ` + error.message, true);
-                }
-            }
-        }
-    </script>
-</body>
-</html>
+        // Durum reng
