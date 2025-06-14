@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proje Takip Sistemi</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-storage-compat.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #0056b3;
+            text-align: center;
+        }
+        p {
+            font-size: 1.1em;
+            text-align: center;
+        }
+        .message {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Proje Takip Sistemi</h1>
+        <p>Firebase bağlantısı test ediliyor...</p>
+        <div id="firebaseStatus" class="message"></div>
+    </div>
+
+    <script>
+        // Firebase yapılandırma objesi
+        const firebaseConfig = {
+            apiKey: "AIzaSyBNwSpbpNuQQ4nTjDAlB6izu5IgkEZxDL0",
+            authDomain: "projetakip-e3a75.firebaseapp.com",
+            projectId: "projetakip-e3a75",
+            storageBucket: "projetakip-e3a75.firebasestorage.app",
+            messagingSenderId: "924120275674",
+            appId: "1:924120275674:web:c8ad3d4c998333d9fd23e3"
+        };
+
+        // Firebase'i başlat
+        firebase.initializeApp(firebaseConfig);
+
+        // Firebase durumunu kontrol et
+        document.addEventListener('DOMContentLoaded', () => {
+            const statusDiv = document.getElementById('firebaseStatus');
+            try {
+                // Sadece basit bir kontrol: app objesi oluştu mu?
+                if (firebase.app()) {
+                    statusDiv.textContent = 'Firebase başarıyla bağlandı!';
+                    statusDiv.style.backgroundColor = '#d4edda';
+                    statusDiv.style.color = '#155724';
+                } else {
+                    statusDiv.textContent = 'Firebase bağlantısı başarısız oldu.';
+                    statusDiv.style.backgroundColor = '#f8d7da';
+                    statusDiv.style.color = '#721c24';
+                }
+            } catch (error) {
+                statusDiv.textContent = 'Firebase bağlantısında bir hata oluştu: ' + error.message;
+                statusDiv.style.backgroundColor = '#f8d7da';
+                statusDiv.style.color = '#721c24';
+                console.error("Firebase initialization error:", error);
+            }
+        });
+    </script>
+</body>
+</html>
