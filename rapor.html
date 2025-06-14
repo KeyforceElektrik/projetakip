@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dönemsel Analiz Raporu</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Sadece rapor sayfasına özel ek stiller */
+        .report-filter-section {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            align-items: flex-end; /* Butonu inputlarla hizala */
+            flex-wrap: wrap; /* Küçük ekranlarda alt alta geçsin */
+        }
+        .report-filter-section .form-group {
+            margin-bottom: 0; /* İçindeki form-group'ların alt boşluğunu sıfırla */
+            flex: 1; /* Eşit genişlikte dağılsınlar */
+            min-width: 180px; /* Minimum genişlik */
+        }
+        .report-filter-section button {
+            flex-shrink: 0; /* Buton daralmasın */
+        }
+
+        .report-summary-box {
+            background-color: #e6f7ff; /* Daha açık mavi, rapor özeti için */
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); /* Esnek sütunlar */
+            gap: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+        .report-summary-item {
+            text-align: center;
+            background-color: #ffffff;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #cce5ff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+        }
+        .report-summary-item h3 {
+            margin-top: 0;
+            font-size: 1.1em;
+            color: #0056b3;
+            margin-bottom: 5px;
+        }
+        .report-summary-item p {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #28a745;
+            margin: 0;
+        }
+        .report-summary-item.negative p {
+            color: #dc3545;
+        }
+
+        /* Rapor tablosu özel stiller */
+        .report-table-container {
+            margin-bottom: 30px;
+        }
+        .report-table th.sortable {
+            cursor: pointer;
+            position: relative;
+        }
+        .report-table th.sortable::after {
+            content: '';
+            display: inline-block;
+            width: 0;
+            height: 0;
+            margin-left: 8px;
+            vertical-align: middle;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+        }
+        .report-table th.sortable.asc::after {
+            border-bottom: 5px solid #333;
+        }
+        .report-table th.sortable.desc::after {
+            border-top: 5px solid #333;
+        }
+        .report-table tr.expandable-row {
+            cursor: pointer;
+            background-color: #f9f9f9;
+        }
+        .report-table tr.expandable-row:hover {
+            background-color: #f0f8ff;
+        }
+        .report-table tr.expanded-details td {
+            padding: 10px 20px;
+            background-color: #f0f4f7; /* Açık mavi ton */
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .expanded-details .inner-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .expanded-details .inner-table th,
+        .expanded-details .inner-table td {
+            border: 1px solid #e9ecef;
+            padding: 8px 10px;
+            text-align: left;
+            font-size: 0.9em;
+        }
+        .expanded-details .inner-table th {
+            background-color: #e2e8ed;
+            font-weight: 600;
+        }
+        
+        .category-analysis-table th.sortable {
+            cursor: pointer;
+            position: relative;
+        }
+        .category-analysis-table th.sortable::after {
+            content: '';
+            display: inline-block;
+            width: 0;
+            height: 0;
+            margin-left: 8px;
+            vertical-align: middle;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+        }
+        .category-analysis-table th.sortable.asc::after {
+            border-bottom: 5px solid #333;
+        }
+        .category-analysis-table th.sortable.desc::after {
+            border-top: 5px solid #333;
+        }
+        .category-analysis-table td.category-name {
+            cursor: pointer;
+            color: #007bff;
+            text-decoration: underline;
+        }
+        .category-analysis-table td.category-name:hover {
+            color: #0056b3;
+        }
+
+        .filter-status {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #34495e;
+            display: none; /* Varsayılan olarak gizli */
+        }
+        .filter-status button {
+            margin-left: 15px;
+            padding: 6px 12px;
+            background-color: #f1c40f; /* Sarı buton */
+            color: #333;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .filter-status button:hover {
+            background-color: #e6b700;
+        }
+
+        @media (max-width: 768px) {
+            .report-filter-section {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .report-filter-section .form-group {
+                min-width: unset;
+                width: 100%;
+            }
+            .report-filter-section button {
+                width: 100%;
+                margin-top: 10px;
+            }
+            .report-summary-box {
+                grid-template-columns: 1fr; /* Tek sütun */
+            }
+            .report-summary-item {
+                border-right: none;
+                border-bottom: 1px solid #cce5ff;
+            }
+            .report-summary-item:last-child {
+                border-bottom: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 id="pageTitle">Dönemsel Analiz Raporu</h1>
+            <div>
+                <span class="user-info">Hoş geldin, <span id="userEmail"></span>!</span>
+                <button id="logoutButton" class="logout-button">Çıkış Yap</button>
+            </div>
+        </header>
+
+        <div class="message" id="systemMessage"></div>
+
+        <h2 class="section-title">Rapor Filtresi</h2>
+        <div class="report-filter-section">
+            <div class="form-group">
+                <label for="startDate">Başlangıç Tarihi:</label>
+                <input type="date" id="startDate" required>
+            </div>
+            <div class="form-group">
+                <label for="endDate">Bitiş Tarihi:</label>
+                <input type="date" id="endDate" required>
+            </div>
+            <button id="applyFilterButton" class="button">Raporu Oluştur</button>
+            <button id="resetFilterButton" class="button secondary" style="display:none;">Filtreyi Temizle</button>
+        </div>
+        
+        <div class="filter-status" id="currentCategoryFilterStatus">
+            <span>Aktif Kategori Filtresi: <strong id="activeCategoryName"></strong></span>
+            <button id="clearCategoryFilterButton">Temizle</button>
+        </div>
+
+
+        <h2 class="section-title">Genel Finansal Özet</h2>
+        <div class="report-summary-box" id="generalSummaryBox">
+            <div class="report-summary-item">
+                <h3>Toplam Proje Sayısı</h3>
+                <p id="totalProjectsCount">0</p>
+            </div>
+            <div class="report-summary-item">
+                <h3>Toplam Sözleşme Bedeli</h3>
+                <p id="totalContractAmount">0,00 TL</p>
+            </div>
+            <div class="report-summary-item">
+                <h3>Toplam Harcama</h3>
+                <p id="totalExpenseSummary">0,00 TL</p>
+            </div>
+            <div class="report-summary-item">
+                <h3>Toplam Tahsilat</h3>
+                <p id="totalCollectionSummary">0,00 TL</p>
+            </div>
+            <div class="report-summary-item" id="netProfitSummaryItem">
+                <h3>Net Kar/Zarar</h3>
+                <p id="netProfitLoss">0,00 TL</p>
+            </div>
+            <div class="report-summary-item">
+                <h3>Ortalama Proje Karı</h3>
+                <p id="averageProjectProfit">0,00 TL</p>
+            </div>
+            <div class="report-summary-item">
+                <h3>Ortalama Kar Marjı</h3>
+                <p id="averageProfitMargin">0,00%</p>
+            </div>
+        </div>
+
+        <h2 class="section-title">Proje Detay Tablosu</h2>
+        <div class="report-table-container">
+            <table class="financial-table report-table">
+                <thead>
+                    <tr id="projectTableHeader">
+                        <th class="sortable" data-sort="projectName">Proje Adı</th>
+                        <th class="sortable" data-sort="customerName">Müşteri</th>
+                        <th class="sortable" data-sort="categories">Kategoriler</th>
+                        <th class="sortable" data-sort="status">Durum</th>
+                        <th class="sortable" data-sort="contractStartDate">Sözl. Başl.</th>
+                        <th class="sortable" data-sort="contractEndDate">Sözl. Bitiş</th>
+                        <th class="sortable" data-sort="contractAmountTL">Sözl. Tutarı (TL)</th>
+                        <th class="sortable" data-sort="totalExpense">Toplam Harcama (TL)</th>
+                        <th class="sortable" data-sort="totalCollection">Toplam Tahsilat (TL)</th>
+                        <th class="sortable" data-sort="netProfitLoss">Net Kar/Zarar (TL)</th>
+                        <th class="sortable" data-sort="profitMargin">Kar Marjı (%)</th>
+                        <th class="sortable" data-sort="projectDuration">Proje Süresi (Gün)</th>
+                    </tr>
+                </thead>
+                <tbody id="projectDetailTableBody">
+                    <tr><td colspan="12" style="text-align:center;">Lütfen rapor oluşturmak için tarih aralığı seçin.</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h2 class="section-title">Proje Tipi (Kategori) Bazlı Performans Analizi</h2>
+        <div class="report-table-container">
+            <table class="financial-table category-analysis-table">
+                <thead>
+                    <tr id="categoryTableHeader">
+                        <th class="sortable" data-sort="categoryName">Kategori</th>
+                        <th class="sortable" data-sort="projectCount">Proje Sayısı</th>
+                        <th class="sortable" data-sort="totalContractAmount">Toplam Sözl. Bedeli (TL)</th>
+                        <th class="sortable" data-sort="totalExpense">Toplam Harcama (TL)</th>
+                        <th class="sortable" data-sort="totalCollection">Toplam Tahsilat (TL)</th>
+                        <th class="sortable" data-sort="netProfitLoss">Toplam Net Kar/Zarar (TL)</th>
+                        <th class="sortable" data-sort="averageProfitMargin">Ort. Kar Marjı (%)</th>
+                        <th>En Karlı Proje</th>
+                        <th>En Zararlı Proje</th>
+                    </tr>
+                </thead>
+                <tbody id="categoryAnalysisTableBody">
+                    <tr><td colspan="9" style="text-align:center;">Kategori bazlı analiz raporu için tarih aralığı seçin.</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="back-button-container">
+            <button class="button secondary" onclick="window.location.href='index.html'">Tüm Projelere Geri Dön</button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            // BURAYA KENDİ GERÇEK FIREBASE API BİLGİLERİNİ YAPIŞTIR!
+            apiKey: "AIzaSyBNwSpbpNuQQ4nTjDAlB6izu5IgkEZxDL0",
+            authDomain: "projetakip-e3a75.firebaseapp.com",
+            projectId: "projetakip-e3a75",
+            storageBucket: "projetakip-e3a75.firebasestorage.app",
+            messagingSenderId: "924120275674",
+            appId: "1:924120275674:web:c8ad3d4c998333d9fd23e3"
+        };
+        firebase.initializeApp(firebaseConfig);
+
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        const userEmailSpan = document.getElementById('userEmail');
+        const logoutButton = document.getElementById('logoutButton');
+        const systemMessageDiv = document.getElementById('systemMessage');
+
+        const startDateInput = document.getElementById('startDate');
+        const endDateInput = document.getElementById('endDate');
+        const applyFilterButton = document.getElementById('applyFilterButton');
+        const resetFilterButton = document.getElementById('resetFilterButton');
+
+        const totalProjectsCountSpan = document.getElementById('totalProjectsCount');
+        const totalContractAmountSpan = document.getElementById('totalContractAmount');
+        const totalExpenseSummarySpan = document.getElementById('totalExpenseSummary');
+        const totalCollectionSummarySpan = document.getElementById('totalCollectionSummary');
+        const netProfitLossSpan = document.getElementById('netProfitLoss');
+        const netProfitSummaryItem = document.getElementById('netProfitSummaryItem');
+        const averageProjectProfitSpan = document.getElementById('averageProjectProfit');
+        const averageProfitMarginSpan = document.getElementById('averageProfitMargin');
+
+        const projectDetailTableBody = document.getElementById('projectDetailTableBody');
+        const projectTableHeader = document.getElementById('projectTableHeader');
+        let currentSortColumn = null;
+        let currentSortDirection = 'asc';
+
+        const categoryAnalysisTableBody = document.getElementById('categoryAnalysisTableBody');
+        const categoryTableHeader = document.getElementById('categoryTableHeader');
+        let currentCategorySortColumn = null;
+        let currentCategorySortDirection = 'asc';
+
+        const currentCategoryFilterStatus = document.getElementById('currentCategoryFilterStatus');
+        const activeCategoryNameSpan = document.getElementById('activeCategoryName');
+        const clearCategoryFilterButton = document.getElementById('clearCategoryFilterButton');
+
+        let allProjectsData = []; // Tüm projeleri ve finansal verilerini tutacak ana dizi
+        let filteredProjects = []; // Filtrelenmiş ve gösterilecek projeler
+        let currentUserId = null;
+        let activeCategoryFilter = null; // Aktif kategori filtresi
+
+        // Kullanıcı giriş durumunu izle
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                currentUserId = user.uid;
+                userEmailSpan.textContent = user.email;
+
+                const today = new Date();
+                const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+                startDateInput.value = firstDayOfMonth.toISOString().split('T')[0];
+                endDateInput.value = lastDayOfMonth.toISOString().split('T')[0];
+
+                loadReportData(); // Sayfa yüklendiğinde varsayılan raporu oluştur
+            } else {
+                window.location.href = 'auth.html';
+            }
+        });
+
+        // Çıkış yap butonu
+        logoutButton.addEventListener('click', async () => {
+            try {
+                await auth.signOut();
+            } catch (error) {
+                showSystemMessage('Çıkış yaparken hata oluştu: ' + error.message, true);
+            }
+        });
+
+        // Sistem mesajı gösterme fonksiyonu
+        function showSystemMessage(message, isError = false) {
+            systemMessageDiv.textContent = message;
+            systemMessageDiv.className = 'message'; // Tüm sınıfları sıfırla
+            if (isError) {
+                systemMessageDiv.classList.add('error-message');
+            } else {
+                systemMessageDiv.classList.add('success');
+            }
+            systemMessageDiv.classList.add('show'); // Görünürlük için 'show' sınıfını ekle
+
+            setTimeout(() => {
+                systemMessageDiv.classList.remove('show'); // 'show' sınıfını kaldırarak gizle
+            }, 5000);
+        }
+
+        // Tarih aralığına göre raporu yükle
+        applyFilterButton.addEventListener('click', loadReportData);
+        resetFilterButton.addEventListener('click', () => {
+            startDateInput.value = '';
+            endDateInput.value = '';
+            activeCategoryFilter = null;
+            clearCategoryFilterButton.click(); // Kategori filtresini de temizle
+            resetFilterButton.style.display = 'none';
+            loadReportData();
+        });
+
+        clearCategoryFilterButton.addEventListener('click', () => {
+            activeCategoryFilter = null;
+            currentCategoryFilterStatus.style.display = 'none';
+            displayProjectData(filteredProjects); // Ana filtreyi koruyarak tekrar render et
+            displayCategoryAnalysis(filteredProjects);
+        });
+
+        async function loadReportData() {
+            showSystemMessage('Rapor verileri yükleniyor...', false);
+            allProjectsData = []; // Her yüklemede veriyi sıfırla
+
+            const startTimestamp = startDateInput.value ? firebase.firestore.Timestamp.fromDate(new Date(startDateInput.value)) : null;
+            const endTimestamp = endDateInput.value ? firebase.firestore.Timestamp.fromDate(new Date(endDateInput.value + 'T23:59:59')) : null;
+
+            if (!startTimestamp || !endTimestamp) {
+                showSystemMessage('Lütfen geçerli bir başlangıç ve bitiş tarihi seçin.', true);
+                projectDetailTableBody.innerHTML = '<tr><td colspan="12" style="text-align:center;">Lütfen rapor oluşturmak için tarih aralığı seçin.</td></tr>';
+                categoryAnalysisTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Kategori bazlı analiz raporu için tarih aralığı seçin.</td></tr>';
+                updateGeneralSummary([]); // Özeti sıfırla
+                resetFilterButton.style.display = 'none';
+                return;
+            }
+
+            resetFilterButton.style.display = 'inline-block'; // Filtre uygulandığında temizle butonunu göster
+
+            try {
+                const projectsSnapshot = await db.collection('projects')
+                    .where('ownerId', '==', currentUserId)
+                    .orderBy('createdAt', 'desc') // Projeleri oluşturulma tarihine göre sırala
+                    .get();
+
+                for (const projectDoc of projectsSnapshot.docs) {
+                    const project = projectDoc.data();
+                    const projectId = projectDoc.id;
+
+                    // Sözleşme tarihleri Date objesine çevrilir
+                    const projectContractStartDate = project.contractStartDate ? project.contractStartDate.toDate() : null;
+                    const projectContractEndDate = project.contractEndDate ? project.contractEndDate.toDate() : null;
+
+                    // Seçilen rapor dönemi ile projenin sözleşme süresinin kesişimini kontrol et
+                    const reportStartDate = startTimestamp.toDate();
+                    const reportEndDate = endTimestamp.toDate();
+
+                    // Proje tarihleri yoksa veya rapor dönemiyle kesişmiyorsa atla
+                    if (!projectContractStartDate || !projectContractEndDate ||
+                        projectContractEndDate < reportStartDate || projectContractStartDate > reportEndDate) {
+                        continue; // Projeyi rapora dahil etme
+                    }
+
+                    // Projenin finansal verilerini çek
+                    let totalExpense = 0;
+                    let totalCollection = 0;
+
+                    const expensesSnapshot = await db.collection('projects').doc(projectId).collection('expenses').get();
+                    const projectExpenses = [];
+                    expensesSnapshot.forEach(expDoc => {
+                        const expense = expDoc.data();
+                        projectExpenses.push(expense);
+                        totalExpense += expense.amountTL || 0;
+                    });
+
+                    const collectionsSnapshot = await db.collection('projects').doc(projectId).collection('collections').get();
+                    const projectCollections = [];
+                    collectionsSnapshot.forEach(colDoc => {
+                        const collection = colDoc.data();
+                        projectCollections.push(collection);
+                        totalCollection += collection.amountTL || 0;
+                    });
+
+                    const netProfitLoss = project.contractAmountTL - totalExpense;
+                    let profitMargin = 0;
+                    if (project.contractAmountTL > 0) {
+                        profitMargin = (netProfitLoss / project.contractAmountTL) * 100;
+                    }
+
+                    // Proje süresi hesaplama (gün olarak)
+                    let projectDuration = 'N/A';
+                    if (projectContractStartDate && projectContractEndDate) {
+                        const diffTime = Math.abs(projectContractEndDate.getTime() - projectContractStartDate.getTime());
+                        projectDuration = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    }
+
+                    allProjectsData.push({
+                        id: projectId,
+                        ...project,
+                        totalExpense: totalExpense,
+                        totalCollection: totalCollection,
+                        netProfitLoss: netProfitLoss,
+                        profitMargin: profitMargin,
+                        projectDuration: projectDuration,
+                        expenses: projectExpenses,
+                        collections: projectCollections
+                    });
+                }
+
+                filterProjectsByCategory(activeCategoryFilter); // Kategori filtresi varsa uygula
+                updateGeneralSummary(filteredProjects);
+                displayProjectData(filteredProjects);
+                displayCategoryAnalysis(filteredProjects);
+                showSystemMessage('Rapor başarıyla oluşturuldu.', false);
+
+            } catch (error) {
+                console.error('Rapor verileri yüklenirken hata oluştu:', error);
+                showSystemMessage('Rapor verileri yüklenirken bir hata oluştu: ' + error.message, true);
+            }
+        }
+
+        // Kategoriye göre filtreleme fonksiyonu
+        function filterProjectsByCategory(category) {
+            activeCategoryFilter = category;
+            if (category) {
+                filteredProjects = allProjectsData.filter(p => p.categories && p.categories.includes(category));
+                activeCategoryNameSpan.textContent = category;
+                currentCategoryFilterStatus.style.display = 'block';
+            } else {
+                filteredProjects = [...allProjectsData]; // Tüm veriyi kullan
+                currentCategoryFilterStatus.style.display = 'none';
+            }
+            displayProjectData(filteredProjects); // Yeniden çiz
+        }
+
+        // Genel Özeti Güncelleme
+        function updateGeneralSummary(projectsToSummarize) {
+            let totalProjects = projectsToSummarize.length;
+            let totalContractAmount = 0;
+            let totalExpense = 0;
+            let totalCollection = 0;
+            let totalNetProfitLoss = 0;
+            let totalProfitMarginSum = 0;
+            let projectsWithContractAmount = 0;
+
+            projectsToSummarize.forEach(p => {
+                totalContractAmount += p.contractAmountTL || 0;
+                totalExpense += p.totalExpense || 0;
+                totalCollection += p.totalCollection || 0;
+                totalNetProfitLoss += p.netProfitLoss || 0;
+
+                if (p.contractAmountTL > 0) {
+                    totalProfitMarginSum += p.profitMargin || 0;
+                    projectsWithContractAmount++;
+                }
+            });
+
+            totalProjectsCountSpan.textContent = totalProjects;
+            totalContractAmountSpan.textContent = totalContractAmount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+            totalExpenseSummarySpan.textContent = totalExpense.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+            totalCollectionSummarySpan.textContent = totalCollection.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+
+            netProfitLossSpan.textContent = totalNetProfitLoss.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+            netProfitSummaryItem.className = totalNetProfitLoss >= 0 ? 'report-summary-item' : 'report-summary-item negative';
+
+            const averageProjectProfit = totalProjects > 0 ? totalNetProfitLoss / totalProjects : 0;
+            averageProjectProfitSpan.textContent = averageProjectProfit.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+
+            const averageProfitMargin = projectsWithContractAmount > 0 ? totalProfitMarginSum / projectsWithContractAmount : 0;
+            averageProfitMarginSpan.textContent = `${averageProfitMargin.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+        }
+
+        // Proje Detay Tablosunu Doldurma
+        function displayProjectData(projects) {
+            projectDetailTableBody.innerHTML = ''; // Tabloyu temizle
+
+            if (projects.length === 0) {
+                projectDetailTableBody.innerHTML = '<tr><td colspan="12" style="text-align:center;">Seçilen tarih aralığında ve filtreye uygun proje bulunamadı.</td></tr>';
+                return;
+            }
+
+            projects.forEach(project => {
+                const row = projectDetailTableBody.insertRow();
+                row.classList.add('expandable-row');
+                row.dataset.projectId = project.id; // Detayları açmak için ID'yi sakla
+
+                row.insertCell(0).textContent = project.projectName;
+                row.insertCell(1).textContent = project.customerName;
+                row.insertCell(2).textContent = project.categories ? project.categories.join(', ') : '';
+                row.insertCell(3).textContent = project.status;
+                row.insertCell(4).textContent = project.contractStartDate ? new Date(project.contractStartDate.toDate()).toLocaleDateString('tr-TR') : 'N/A';
+                row.insertCell(5).textContent = project.contractEndDate ? new Date(project.contractEndDate.toDate()).toLocaleDateString('tr-TR') : 'N/A';
+                row.insertCell(6).textContent = (project.contractAmountTL || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                row.insertCell(7).textContent = (project.totalExpense || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                row.insertCell(8).textContent = (project.totalCollection || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                
+                const netProfitCell = row.insertCell(9);
+                netProfitCell.textContent = (project.netProfitLoss || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                if (project.netProfitLoss < 0) netProfitCell.style.color = '#dc3545'; else netProfitCell.style.color = '#28a745';
+
+                const profitMarginCell = row.insertCell(10);
+                profitMarginCell.textContent = `${(project.profitMargin || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+                if (project.profitMargin < 0) profitMarginCell.style.color = '#dc3545'; else profitMarginCell.style.color = '#28a745';
+
+
+                row.insertCell(11).textContent = project.projectDuration;
+
+                // Genişletilebilir detay satırı
+                const detailRow = projectDetailTableBody.insertRow();
+                detailRow.classList.add('expanded-details');
+                detailRow.style.display = 'none'; // Varsayılan olarak gizle
+                const detailCell = detailRow.insertCell(0);
+                detailCell.colSpan = 12; // Tüm sütunları kapsa
+                
+                // Harcama ve Tahsilat iç tabloları
+                let detailsHtml = `
+                    <h4>Harcamalar:</h4>
+                    <table class="inner-table">
+                        <thead>
+                            <tr>
+                                <th>Açıklama</th>
+                                <th>Miktar</th>
+                                <th>P.B.</th>
+                                <th>Kur</th>
+                                <th>Tutar (TL)</th>
+                                <th>Tarih</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                if (project.expenses.length === 0) {
+                    detailsHtml += `<tr><td colspan="6" style="text-align:center;">Harcama bulunamadı.</td></tr>`;
+                } else {
+                    project.expenses.forEach(exp => {
+                        detailsHtml += `
+                            <tr>
+                                <td>${exp.description}</td>
+                                <td>${exp.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                <td>${exp.currency}</td>
+                                <td>${exp.exchangeRate ? exp.exchangeRate.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) : '-'}</td>
+                                <td>${(exp.amountTL || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })}</td>
+                                <td>${exp.date ? new Date(exp.date.toDate()).toLocaleDateString('tr-TR') : 'N/A'}</td>
+                            </tr>
+                        `;
+                    });
+                }
+                detailsHtml += `
+                        </tbody>
+                    </table>
+
+                    <h4>Tahsilatlar:</h4>
+                    <table class="inner-table">
+                        <thead>
+                            <tr>
+                                <th>Tarih</th>
+                                <th>Tip</th>
+                                <th>Açıklama/Detay</th>
+                                <th>Vade Tarihi</th>
+                                <th>Miktar</th>
+                                <th>P.B.</th>
+                                <th>Kur</th>
+                                <th>Tutar (TL)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                if (project.collections.length === 0) {
+                    detailsHtml += `<tr><td colspan="8" style="text-align:center;">Tahsilat bulunamadı.</td></tr>`;
+                } else {
+                    project.collections.forEach(col => {
+                        let detailText = col.description || '';
+                        if (col.type === 'Çek' && col.checkNumber) {
+                            detailText += ` (Çek No: ${col.checkNumber})`;
+                        } else if (col.type === 'Barter' && col.barterAsset) {
+                            detailText += ` (Varlık: ${col.barterAsset})`;
+                        }
+                        
+                        let amountDisplay = (col.amount || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        let currencyDisplay = col.currency || '';
+                        let exchangeRateDisplay = col.exchangeRate ? col.exchangeRate.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) : '-';
+
+                        if (col.type === 'Barter') {
+                            amountDisplay = (col.barterValueTL || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                            currencyDisplay = 'TRY';
+                            exchangeRateDisplay = '-';
+                        }
+                        
+                        detailsHtml += `
+                            <tr>
+                                <td>${col.date ? new Date(col.date.toDate()).toLocaleDateString('tr-TR') : 'N/A'}</td>
+                                <td>${col.type || 'N/A'}</td>
+                                <td>${detailText}</td>
+                                <td>${col.checkDueDate ? new Date(col.checkDueDate.toDate()).toLocaleDateString('tr-TR') : 'N/A'}</td>
+                                <td>${amountDisplay}</td>
+                                <td>${currencyDisplay}</td>
+                                <td>${exchangeRateDisplay}</td>
+                                <td>${(col.amountTL || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })}</td>
+                            </tr>
+                        `;
+                    });
+                }
+                detailsHtml += `
+                        </tbody>
+                    </table>
+                `;
+                detailCell.innerHTML = detailsHtml;
+            });
+
+            // Genişletilebilir satır olay dinleyicileri
+            document.querySelectorAll('.expandable-row').forEach(row => {
+                row.addEventListener('click', (e) => {
+                    // Tıklanan elemanın bir buton olup olmadığını kontrol et (tablo başlığı hariç)
+                    if (e.target.tagName === 'BUTTON' || e.target.closest('th')) {
+                        return; // Butona veya başlığa tıklandıysa işlemi yapma
+                    }
+                    const nextRow = row.nextElementSibling;
+                    if (nextRow && nextRow.classList.contains('expanded-details')) {
+                        nextRow.style.display = nextRow.style.display === 'none' ? 'table-row' : 'none';
+                    }
+                });
+            });
+        }
+
+        // Proje tablosu sıralama işlevi
+        projectTableHeader.querySelectorAll('.sortable').forEach(header => {
+            header.addEventListener('click', () => {
+                const sortColumn = header.dataset.sort;
+
+                // Reset all headers
+                projectTableHeader.querySelectorAll('.sortable').forEach(h => {
+                    h.classList.remove('asc', 'desc');
+                });
+
+                if (currentSortColumn === sortColumn) {
+                    currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSortColumn = sortColumn;
+                    currentSortDirection = 'asc';
+                }
+
+                header.classList.add(currentSortDirection);
+
+                sortProjectData(sortColumn, currentSortDirection);
+            });
+        });
+
+        function sortProjectData(column, direction) {
+            const sortedProjects = [...filteredProjects].sort((a, b) => {
+                let valA = a[column];
+                let valB = b[column];
+
+                // Tarih alanları için özel dönüşüm
+                if (column.includes('Date')) {
+                    valA = a[column] ? a[column].toDate().getTime() : 0;
+                    valB = b[column] ? b[column].toDate().getTime() : 0;
+                }
+                // String alanlar için küçük harfe çevirme
+                else if (typeof valA === 'string') {
+                    valA = valA.toLowerCase();
+                    valB = valB.toLowerCase();
+                }
+                // Dizi (categories) alanları için join yapıp karşılaştırma
+                else if (Array.isArray(valA)) {
+                    valA = valA.join(', ').toLowerCase();
+                    valB = valB.join(', ').toLowerCase();
+                }
+
+                if (valA < valB) {
+                    return direction === 'asc' ? -1 : 1;
+                }
+                if (valA > valB) {
+                    return direction === 'asc' ? 1 : -1;
+                }
+                return 0;
+            });
+            displayProjectData(sortedProjects);
+        }
+
+        // Kategori Analiz Tablosu Doldurma ve Sıralama
+        function displayCategoryAnalysis(projects) {
+            const categoriesMap = {}; // Her kategori için verileri toplamak için map
+
+            projects.forEach(project => {
+                if (project.categories && project.categories.length > 0) {
+                    project.categories.forEach(category => {
+                        if (!categoriesMap[category]) {
+                            categoriesMap[category] = {
+                                categoryName: category,
+                                projectCount: 0,
+                                totalContractAmount: 0,
+                                totalExpense: 0,
+                                totalCollection: 0,
+                                totalNetProfitLoss: 0,
+                                totalProfitMarginSum: 0,
+                                projectsWithContractAmount: 0,
+                                mostProfitableProject: { name: '', profit: -Infinity },
+                                leastProfitableProject: { name: '', profit: Infinity }
+                            };
+                        }
+
+                        const cat = categoriesMap[category];
+                        cat.projectCount++;
+                        cat.totalContractAmount += project.contractAmountTL || 0;
+                        cat.totalExpense += project.totalExpense || 0;
+                        cat.totalCollection += project.totalCollection || 0;
+                        cat.totalNetProfitLoss += project.netProfitLoss || 0;
+
+                        if (project.contractAmountTL > 0) {
+                            cat.totalProfitMarginSum += project.profitMargin || 0;
+                            cat.projectsWithContractAmount++;
+                        }
+
+                        // En karlı/zararlı proje kontrolü
+                        if (project.netProfitLoss > cat.mostProfitableProject.profit) {
+                            cat.mostProfitableProject = { name: project.projectName, profit: project.netProfitLoss };
+                        }
+                        if (project.netProfitLoss < cat.leastProfitableProject.profit) {
+                            cat.leastProfitableProject = { name: project.projectName, profit: project.netProfitLoss };
+                        }
+                    });
+                }
+            });
+
+            const categoryData = Object.values(categoriesMap).map(cat => {
+                cat.averageProfitMargin = cat.projectsWithContractAmount > 0 ? cat.totalProfitMarginSum / cat.projectsWithContractAmount : 0;
+                return cat;
+            });
+
+            categoryAnalysisTableBody.innerHTML = '';
+            if (categoryData.length === 0) {
+                categoryAnalysisTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Kategori bazlı analiz için uygun veri bulunamadı.</td></tr>';
+                return;
+            }
+
+            // Kategori tablosunu sırala (varsayılan veya mevcut sıralamaya göre)
+            const sortedCategoryData = [...categoryData].sort((a, b) => {
+                let valA = a[currentCategorySortColumn || 'categoryName']; // Varsayılan sıralama
+                let valB = b[currentCategorySortColumn || 'categoryName'];
+
+                if (typeof valA === 'string') {
+                    valA = valA.toLowerCase();
+                    valB = valB.toLowerCase();
+                }
+
+                if (valA < valB) return (currentCategorySortDirection === 'asc' ? -1 : 1);
+                if (valA > valB) return (currentCategorySortDirection === 'asc' ? 1 : -1);
+                return 0;
+            });
+
+
+            sortedCategoryData.forEach(cat => {
+                const row = categoryAnalysisTableBody.insertRow();
+                const categoryNameCell = row.insertCell(0);
+                categoryNameCell.textContent = cat.categoryName;
+                categoryNameCell.classList.add('category-name'); // Tıklanabilir hale getir
+                categoryNameCell.dataset.category = cat.categoryName; // Filtrelemek için kategori adını sakla
+
+                row.insertCell(1).textContent = cat.projectCount;
+                row.insertCell(2).textContent = cat.totalContractAmount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                row.insertCell(3).textContent = cat.totalExpense.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                row.insertCell(4).textContent = cat.totalCollection.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                
+                const netProfitCell = row.insertCell(5);
+                netProfitCell.textContent = cat.totalNetProfitLoss.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                if (cat.totalNetProfitLoss < 0) netProfitCell.style.color = '#dc3545'; else netProfitCell.style.color = '#28a745';
+
+                const avgMarginCell = row.insertCell(6);
+                avgMarginCell.textContent = `${cat.averageProfitMargin.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+                if (cat.averageProfitMargin < 0) avgMarginCell.style.color = '#dc3545'; else avgMarginCell.style.color = '#28a745';
+
+                row.insertCell(7).textContent = cat.mostProfitableProject.name ? `${cat.mostProfitableProject.name} (${cat.mostProfitableProject.profit.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })})` : 'Yok';
+                row.insertCell(8).textContent = cat.leastProfitableProject.name ? `${cat.leastProfitableProject.name} (${cat.leastProfitableProject.profit.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })})` : 'Yok';
+            });
+            
+            // Kategori adına tıklama olayları
+            categoryAnalysisTableBody.querySelectorAll('.category-name').forEach(cell => {
+                cell.addEventListener('click', (e) => {
+                    const categoryToFilter = e.target.dataset.category;
+                    filterProjectsByCategory(categoryToFilter);
+                });
+            });
+        }
+
+        // Kategori tablosu sıralama işlevi
+        categoryTableHeader.querySelectorAll('.sortable').forEach(header => {
+            header.addEventListener('click', () => {
+                const sortColumn = header.dataset.sort;
+
+                // Reset all headers
+                categoryTableHeader.querySelectorAll('.sortable').forEach(h => {
+                    h.classList.remove('asc', 'desc');
+                });
+
+                if (currentCategorySortColumn === sortColumn) {
+                    currentCategorySortDirection = currentCategorySortDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentCategorySortColumn = sortColumn;
+                    currentCategorySortDirection = 'asc';
+                }
+
+                header.classList.add(currentCategorySortDirection);
+
+                displayCategoryAnalysis(filteredProjects); // Sıralanmış veriyi tekrar çiz
+            });
+        });
+
+    </script>
+</body>
+</html>
