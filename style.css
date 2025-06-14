@@ -1,6 +1,6 @@
 /* Genel Stil Ayarları */
 body {
-    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', sans-serif; /* Yeni font */
     margin: 0;
     padding: 0;
     background-color: #f0f2f5; /* Açık gri arka plan */
@@ -163,6 +163,32 @@ h1 {
     box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
 }
 
+/* Mevcut Form Elementleri için Daha Kompakt Gruplama (Tarih ve Sözleşme Bedeli) */
+/* image_03b6dc.png'deki gibi "Sözleşme Başlangıç Tarihi", "Sözleşme Bitiş Tarihi" ve "Sözleşme Bedeli" inputları için */
+/* Eğer bu elementler ayrı form-group'lar içindeyse, bu kurallar onları etkileyecektir. */
+.form-group input[type="date"],
+.form-group input[type="number"] {
+    max-width: 300px; /* Belirli input türleri için maksimum genişlik ayarlaması */
+}
+.form-group input[type="date"] {
+    padding-right: 35px; /* Takvim ikonu için yer */
+}
+
+/* Mevcut: Tarih ve Para Birimi Girişleri İçin Daha Kompakt Gruplama */
+.form-row {
+    display: flex;
+    gap: 20px; /* Elemanlar arası boşluk */
+    margin-bottom: 20px;
+    flex-wrap: wrap; /* Küçük ekranlarda alt alta geçsin */
+}
+
+.form-row .form-group {
+    flex: 1; /* Her form grubu eşit genişlikte yer kaplar */
+    min-width: 250px; /* Minimum genişlik, sıkışmayı önler */
+    margin-bottom: 0; /* form-row zaten margin içerdiği için */
+}
+
+/* Sözleşme Bedeli ve Para Birimi select'i eğer yan yanaysa */
 .input-with-currency {
     display: flex;
     align-items: center;
@@ -177,6 +203,7 @@ h1 {
 .input-with-currency select {
     width: 110px; /* Para birimi seçici genişliği */
     flex-shrink: 0;
+    padding: 10px; /* Select kutusunun paddingini ayarlayarak input ile hizala */
 }
 
 /* Genel Buton Stilleri */
@@ -221,7 +248,7 @@ h1 {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed; /* Sütun genişliklerini sabitler */
-    min-width: 800px; /* Tablet ve masaüstü için minimum genişlik, daha az sütun olduğu için azaltıldı */
+    min-width: 800px; /* Tablet ve masaüstü için minimum genişlik */
 }
 
 .financial-table th, .financial-table td {
@@ -244,8 +271,16 @@ h1 {
     z-index: 1;
 }
 
-/* Proje Detay Tablosu (rapor.html) - Sütun Genişlikleri */
-/* Yeni, sadeleştirilmiş sütunlar için genişlikler */
+/* Proje Detay Tablosu (index.html ve rapor.html) - Sütun Genişlikleri Optimizasyonu */
+.financial-table.index-table th:nth-child(1), .financial-table.index-table td:nth-child(1) { width: 28%; } /* Proje Adı */
+.financial-table.index-table th:nth-child(2), .financial-table.index-table td:nth-child(2) { width: 18%; } /* Müşteri */
+.financial-table.index-table th:nth-child(3), .financial-table.index-table td:nth-child(3) { width: 18%; } /* Kategoriler */
+.financial-table.index-table th:nth-child(4), .financial-table.index-table td:nth-child(4) { width: 10%; } /* Durum */
+.financial-table.index-table th:nth-child(5), .financial-table.index-table td:nth-child(5) { width: 14%; text-align: right; } /* Sözleşme Bedeli */
+.financial-table.index-table th:nth-child(6), .financial-table.index-table td:nth-child(6) { width: 12%; text-align: center; } /* İşlemler */
+
+
+/* Rapor tablosu özel stiller (rapor.html için özel sütunlar) */
 .report-table th:nth-child(1), .report-table td:nth-child(1) { width: 25%; } /* Proje Adı */
 .report-table th:nth-child(2), .report-table td:nth-child(2) { width: 18%; } /* Müşteri */
 .report-table th:nth-child(3), .report-table td:nth-child(3) { width: 18%; } /* Kategoriler */
@@ -255,23 +290,36 @@ h1 {
 .report-table th:nth-child(7), .report-table td:nth-child(7) { width: 10%; text-align: right; } /* Kar Marjı (%) */
 
 
-/* İç tablolardaki (harcamalar/tahsilatlar) hücreler için genel ayarlamalar */
+/* İç tablolardaki (harcamalar/tahsilatlar) hücreler için genel ayarlamalar - Optimizasyon */
+.expanded-details .inner-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    table-layout: auto; /* İç tablolar için otomatik genişlik daha iyi olabilir */
+}
+
 .expanded-details .inner-table th,
 .expanded-details .inner-table td {
-    padding: 6px 5px;
-    font-size: 0.85em;
-    white-space: normal; /* İç tablolarda da alt satıra insin */
+    padding: 6px 5px; /* Biraz daha kompakt */
+    font-size: 0.8em; /* Biraz daha küçük font */
+    border: 1px solid #e9ecef;
+    white-space: normal;
     word-wrap: break-word;
     overflow-wrap: break-word;
 }
+.expanded-details .inner-table th {
+    background-color: #e2e8ed;
+    font-weight: 600;
+}
 
 /* İç tablolardaki sayısal değerler için sağa hizalama */
-.expanded-details .inner-table td:nth-child(2), /* Harcama Miktar */
-.expanded-details .inner-table td:nth-child(4), /* Harcama Kur */
-.expanded-details .inner-table td:nth-child(5), /* Harcama Tutar (TL) */
-.expanded-details .inner-table td:nth-child(5), /* Tahsilat Miktar */
-.expanded-details .inner-table td:nth-child(7), /* Tahsilat Kur */
-.expanded-details .inner-table td:nth-child(8) /* Tahsilat Tutar (TL) */ {
+/* Mevcut harcama/tahsilat tablolarına göre sütun indekslerini kontrol etmek gerekebilir. */
+/* Eğer HTML yapısında değişiklik yapmazsak bu kısımlar mevcut halleriyle çalışmaya devam eder. */
+.expanded-details .inner-table td:nth-child(2), /* Miktar */
+.expanded-details .inner-table td:nth-child(4), /* Kur (Varsa) */
+.expanded-details .inner-table td:nth-child(5), /* Tutar (TL) */
+.expanded-details .inner-table td:nth-child(6), /* Tahsilat Miktar (Eğer tahsilat tablosu ayrıysa) */
+.expanded-details .inner-table td:nth-child(8) /* Tahsilat Tutar (TL) (Eğer tahsilat tablosu ayrıysa) */ {
     text-align: right;
 }
 
@@ -437,6 +485,21 @@ h1 {
         margin-bottom: 5px;
     }
 
+    .form-row {
+        flex-direction: column;
+        gap: 0; /* Küçük ekranlarda gap'ı kaldır */
+    }
+
+    .form-row .form-group {
+        min-width: unset; /* Minimum genişliği kaldır */
+        width: 100%;
+        margin-bottom: 20px; /* Her grup arasına boşluk ekle */
+    }
+    .form-row .form-group:last-child {
+        margin-bottom: 0;
+    }
+
+    /* Eğer hala mevcut HTML'de .input-with-currency varsa */
     .input-with-currency {
         flex-direction: column;
         gap: 15px;
@@ -450,6 +513,7 @@ h1 {
     .input-with-currency select {
         margin-right: 0; /* Override default margin */
     }
+
 
     .summary-box {
         flex-direction: column;
@@ -606,24 +670,6 @@ h1 {
     background-color: #f0f4f7; /* Açık mavi ton */
     border-bottom: 1px solid #e0e0e0;
 }
-.expanded-details .inner-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 10px;
-}
-.expanded-details .inner-table th,
-.expanded-details .inner-table td {
-    border: 1px solid #e9ecef;
-    padding: 8px 10px;
-    text-align: left;
-    font-size: 0.9em;
-    white-space: normal; /* İç tablo hücrelerinde metin kırılsın */
-    word-break: break-word; /* Uzun kelimeleri kır */
-}
-.expanded-details .inner-table th {
-    background-color: #e2e8ed;
-    font-weight: 600;
-}
 
 .category-analysis-table th.sortable {
     cursor: pointer;
@@ -675,5 +721,3 @@ h1 {
 .filter-status button:hover {
     background-color: #e6b700;
 }
-
-/* Grafik Alanları - TAMAMEN KALDIRILDI */
