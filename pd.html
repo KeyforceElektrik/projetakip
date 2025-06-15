@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title id="dynamicPageTitle">Proje Detayı</title>
+    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <!-- Google Fonts - Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -30,6 +32,7 @@
             <button class="tab-button" data-tab="collections">Tahsilatlar</button>
         </div>
 
+        <!-- Proje Bilgileri Sekmesi -->
         <div id="project-info" class="tab-content active">
             <h2 class="section-title">Proje Detayları</h2>
             <form id="projectForm">
@@ -79,6 +82,7 @@
             </form>
         </div>
 
+        <!-- Harcamalar Sekmesi -->
         <div id="expenses" class="tab-content">
             <h2 class="section-title">Harcamalar</h2>
             <form id="expenseForm">
@@ -133,6 +137,7 @@
             </div>
         </div>
 
+        <!-- Tahsilatlar Sekmesi -->
         <div id="collections" class="tab-content">
             <h2 class="section-title">Tahsilatlar</h2>
             <form id="collectionForm">
@@ -313,6 +318,7 @@
             if (user) {
                 currentUserId = user.uid;
                 userEmailSpan.textContent = user.email;
+                console.log("Auth State Changed: User Logged In. UID:", currentUserId); // LOG
 
                 const urlParams = new URLSearchParams(window.location.search);
                 currentProjectId = urlParams.get('id');
@@ -337,6 +343,7 @@
                     document.querySelector('.tab-button[data-tab="collections"]').style.display = 'none';
                 }
             } else {
+                console.log("Auth State Changed: User Logged Out. Redirecting to auth.html"); // LOG
                 window.location.href = 'auth.html';
             }
         });
@@ -345,8 +352,10 @@
         logoutButton.addEventListener('click', async () => {
             try {
                 await auth.signOut();
+                console.log("User signed out."); // LOG
             } catch (error) {
                 showSystemMessage('Çıkış yaparken hata oluştu: ' + error.message, true);
+                console.error("Logout Error:", error); // LOG
             }
         });
 
@@ -381,13 +390,25 @@
             }
 
             try {
+                if (!currentUserId) { // Ek kontrol
+                    showSystemMessage('Lütfen önce giriş yapın.', true);
+                    console.error("Project save failed: currentUserId is null."); // LOG
+                    return;
+                }
+
                 if (currentProjectId) {
+                    // Mevcut projeyi güncelle
+                    console.log("Attempting to update project:", currentProjectId, "at path:", db.collection('users').doc(currentUserId).collection('projects').doc(currentProjectId).path); // LOG
                     await db.collection('users').doc(currentUserId).collection('projects').doc(currentProjectId).update(projectData);
                     showSystemMessage('Proje başarıyla güncellendi!');
+                    console.log("Project updated successfully."); // LOG
                 } else {
+                    // Yeni proje ekle
+                    console.log("Attempting to add new project for user:", currentUserId, "at path:", db.collection('users').doc(currentUserId).collection('projects').path); // LOG
                     const docRef = await db.collection('users').doc(currentUserId).collection('projects').add(projectData);
                     currentProjectId = docRef.id;
                     showSystemMessage('Proje başarıyla eklendi!');
+                    console.log("New project added with ID:", currentProjectId); // LOG
                     window.history.pushState({}, '', `pd.html?id=${currentProjectId}`);
                     // Yeni proje eklendikten sonra Harcama ve Tahsilat sekmelerini görünür yap
                     document.getElementById('expenses').style.display = 'block';
@@ -400,15 +421,22 @@
                     deleteProjectButton.style.display = 'inline-block';
                 }
             } catch (error) {
-                console.error("Proje kaydedilirken hata oluştu: ", error);
+                console.error("Proje kaydedilirken hata oluştu: ", error); // LOG
                 showSystemMessage('Proje kaydedilirken hata oluştu: ' + error.message, true);
             }
         });
 
         // Proje verilerini yükle
         async function loadProjectData(projectId) {
+            if (!currentUserId) { // Ek kontrol
+                console.warn("loadProjectData: currentUserId is null. User might not be authenticated yet."); // LOG
+                return;
+            }
+            const projectDocRef = db.collection('users').doc(currentUserId).collection('projects').doc(projectId);
+            console.log("Attempting to load project data from path:", projectDocRef.path); // LOG
+
             try {
-                const doc = await db.collection('users').doc(currentUserId).collection('projects').doc(projectId).get();
+                const doc = await projectDocRef.get();
                 if (doc.exists) {
                     const project = doc.data();
                     projectNameInput.value = project.projectName || '';
@@ -418,12 +446,14 @@
                     contractEndDateInput.value = project.contractEndDate || '';
                     contractAmountTLInput.value = project.contractAmountTL || 0;
                     statusSelect.value = project.status || 'Başlamadı';
+                    console.log("Project data loaded successfully for ID:", projectId); // LOG
                 } else {
                     showSystemMessage('Proje bulunamadı.', true);
+                    console.warn("Project with ID", projectId, "not found."); // LOG
                     window.location.href = 'index.html';
                 }
             } catch (error) {
-                console.error("Proje yüklenirken hata oluştu: ", error);
+                console.error("Proje yüklenirken hata oluştu: ", error); // LOG
                 showSystemMessage('Proje yüklenirken hata oluştu: ' + error.message, true);
             }
         }
@@ -431,6 +461,12 @@
         // Projeyi sil butonu
         deleteProjectButton.addEventListener('click', async () => {
             if (currentProjectId && confirm('Bu projeyi silmek istediğinizden emin misiniz? Harcamalar ve tahsilatlar da silinecektir.')) {
+                if (!currentUserId) { // Ek kontrol
+                    showSystemMessage('Lütfen önce giriş yapın.', true);
+                    console.error("Project deletion failed: currentUserId is null."); // LOG
+                    return;
+                }
+                console.log("Attempting to delete project and subcollections for ID:", currentProjectId); // LOG
                 try {
                     const projectRef = db.collection('users').doc(currentUserId).collection('projects').doc(currentProjectId);
 
@@ -438,22 +474,26 @@
                     const batch = db.batch();
                     expensesSnapshot.forEach(doc => {
                         batch.delete(doc.ref);
+                        console.log("Adding expense to batch for deletion:", doc.id); // LOG
                     });
 
                     const collectionsSnapshot = await projectRef.collection('collections').get();
                     collectionsSnapshot.forEach(doc => {
                         batch.delete(doc.ref);
+                        console.log("Adding collection to batch for deletion:", doc.id); // LOG
                     });
 
                     await batch.commit();
+                    console.log("Batch operations (expenses, collections deletion) committed."); // LOG
 
                     await projectRef.delete();
                     showSystemMessage('Proje başarıyla silindi!');
+                    console.log("Project", currentProjectId, "deleted successfully."); // LOG
                     setTimeout(() => {
                         window.location.href = 'index.html';
                     }, 1500);
                 } catch (error) {
-                    console.error("Proje silinirken hata oluştu: ", error);
+                    console.error("Proje silinirken hata oluştu: ", error); // LOG
                     showSystemMessage('Proje silinirken hata oluştu: ' + error.message, true);
                 }
             }
@@ -464,6 +504,11 @@
             e.preventDefault();
             if (!currentProjectId) {
                 showSystemMessage('Lütfen önce projeyi kaydedin.', true);
+                return;
+            }
+            if (!currentUserId) { // Ek kontrol
+                showSystemMessage('Lütfen önce giriş yapın.', true);
+                console.error("Expense save failed: currentUserId is null."); // LOG
                 return;
             }
 
@@ -487,14 +532,18 @@
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
 
+            const expenseCollectionRef = db.collection('users').doc(currentUserId).collection('projects').doc(currentProjectId).collection('expenses');
+            console.log("Attempting to add expense to path:", expenseCollectionRef.path); // LOG
+
             try {
-                await db.collection('users').doc(currentUserId).collection('projects').doc(currentProjectId).collection('expenses').add(expenseData);
+                await expenseCollectionRef.add(expenseData);
                 showSystemMessage('Harcama başarıyla eklendi!');
+                console.log("Expense added successfully."); // LOG
                 expenseForm.reset();
                 expenseExchangeRateInput.value = 1;
                 loadExpenses(currentProjectId);
             } catch (error) {
-                console.error("Harcama eklenirken hata oluştu: ", error);
+                console.error("Harcama eklenirken hata oluştu: ", error); // LOG
                 showSystemMessage('Harcama eklenirken hata oluştu: ' + error.message, true);
             }
         });
@@ -502,10 +551,19 @@
         // Harcamaları Yükle
         async function loadExpenses(projectId) {
             expensesTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Harcamalar yükleniyor...</td></tr>';
+            if (!currentUserId || !projectId) { // Ek kontrol
+                console.warn("loadExpenses: currentUserId or projectId is null. Skipping load."); // LOG
+                expensesTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Harcamalar yüklenemedi (Kullanıcı/Proje bilgisi eksik).</td></tr>';
+                return;
+            }
+            const expenseCollectionRef = db.collection('users').doc(currentUserId).collection('projects').doc(projectId).collection('expenses');
+            console.log("Attempting to load expenses from path:", expenseCollectionRef.path); // LOG
+
             try {
-                const snapshot = await db.collection('users').doc(currentUserId).collection('projects').doc(projectId).collection('expenses').orderBy('date', 'desc').get();
+                const snapshot = await expenseCollectionRef.orderBy('date', 'desc').get();
                 if (snapshot.empty) {
                     expensesTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Henüz harcama eklenmedi.</td></tr>';
+                    console.log("No expenses found for project:", projectId); // LOG
                     return;
                 }
 
@@ -526,12 +584,18 @@
                     deleteButton.classList.add('delete-btn');
                     deleteButton.addEventListener('click', async () => {
                         if (confirm('Bu harcamayı silmek istediğinizden emin misiniz?')) {
+                            if (!currentUserId) {
+                                showSystemMessage('Lütfen önce giriş yapın.', true);
+                                return;
+                            }
+                            console.log("Attempting to delete expense:", doc.id, "from path:", expenseCollectionRef.doc(doc.id).path); // LOG
                             try {
-                                await db.collection('users').doc(currentUserId).collection('projects').doc(projectId).collection('expenses').doc(doc.id).delete();
+                                await expenseCollectionRef.doc(doc.id).delete();
                                 showSystemMessage('Harcama başarıyla silindi.');
+                                console.log("Expense", doc.id, "deleted successfully."); // LOG
                                 loadExpenses(projectId);
                             } catch (error) {
-                                console.error("Harcama silinirken hata oluştu: ", error);
+                                console.error("Harcama silinirken hata oluştu: ", error); // LOG
                                 showSystemMessage('Harcama silinirken hata oluştu: ' + error.message, true);
                             }
                         }
@@ -539,8 +603,9 @@
                     actionsCell.appendChild(deleteButton);
                     actionsCell.style.textAlign = 'center';
                 });
+                console.log("Expenses loaded successfully for project:", projectId); // LOG
             } catch (error) {
-                console.error("Harcamalar yüklenirken hata oluştu: ", error);
+                console.error("Harcamalar yüklenirken hata oluştu: ", error); // LOG
                 showSystemMessage('Harcamalar yüklenirken hata oluştu: ' + error.message, true);
             }
         }
@@ -573,6 +638,11 @@
             e.preventDefault();
             if (!currentProjectId) {
                 showSystemMessage('Lütfen önce projeyi kaydedin.', true);
+                return;
+            }
+            if (!currentUserId) { // Ek kontrol
+                showSystemMessage('Lütfen önce giriş yapın.', true);
+                console.error("Collection save failed: currentUserId is null."); // LOG
                 return;
             }
 
@@ -618,15 +688,19 @@
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
 
+            const collectionCollectionRef = db.collection('users').doc(currentUserId).collection('projects').doc(currentProjectId).collection('collections');
+            console.log("Attempting to add collection to path:", collectionCollectionRef.path); // LOG
+
             try {
-                await db.collection('users').doc(currentUserId).collection('projects').doc(currentProjectId).collection('collections').add(collectionData);
+                await collectionCollectionRef.add(collectionData);
                 showSystemMessage('Tahsilat başarıyla eklendi!');
+                console.log("Collection added successfully."); // LOG
                 collectionForm.reset();
                 collectionExchangeRateInput.value = 1;
                 collectionTypeSelect.dispatchEvent(new Event('change'));
                 loadCollections(currentProjectId);
             } catch (error) {
-                console.error("Tahsilat eklenirken hata oluştu: ", error);
+                console.error("Tahsilat eklenirken hata oluştu: ", error); // LOG
                 showSystemMessage('Tahsilat eklenirken hata oluştu: ' + error.message, true);
             }
         });
@@ -634,10 +708,19 @@
         // Tahsilatları Yükle
         async function loadCollections(projectId) {
             collectionsTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Tahsilatlar yükleniyor...</td></tr>';
+            if (!currentUserId || !projectId) { // Ek kontrol
+                console.warn("loadCollections: currentUserId or projectId is null. Skipping load."); // LOG
+                collectionsTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Tahsilatlar yüklenemedi (Kullanıcı/Proje bilgisi eksik).</td></tr>';
+                return;
+            }
+            const collectionCollectionRef = db.collection('users').doc(currentUserId).collection('projects').doc(projectId).collection('collections');
+            console.log("Attempting to load collections from path:", collectionCollectionRef.path); // LOG
+
             try {
-                const snapshot = await db.collection('users').doc(currentUserId).collection('projects').doc(projectId).collection('collections').orderBy('date', 'desc').get();
+                const snapshot = await collectionCollectionRef.orderBy('date', 'desc').get();
                 if (snapshot.empty) {
                     collectionsTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Henüz tahsilat eklenmedi.</td></tr>';
+                    console.log("No collections found for project:", projectId); // LOG
                     return;
                 }
 
@@ -668,12 +751,18 @@
                     deleteButton.classList.add('delete-btn');
                     deleteButton.addEventListener('click', async () => {
                         if (confirm('Bu tahsilatı silmek istediğinizden emin misiniz?')) {
+                            if (!currentUserId) {
+                                showSystemMessage('Lütfen önce giriş yapın.', true);
+                                return;
+                            }
+                            console.log("Attempting to delete collection:", doc.id, "from path:", collectionCollectionRef.doc(doc.id).path); // LOG
                             try {
-                                await db.collection('users').doc(currentUserId).collection('projects').doc(projectId).collection('collections').doc(doc.id).delete();
+                                await collectionCollectionRef.doc(doc.id).delete();
                                 showSystemMessage('Tahsilat başarıyla silindi.');
+                                console.log("Collection", doc.id, "deleted successfully."); // LOG
                                 loadCollections(projectId);
                             } catch (error) {
-                                console.error("Tahsilat silinirken hata oluştu: ", error);
+                                console.error("Tahsilat silinirken hata oluştu: ", error); // LOG
                                 showSystemMessage('Tahsilat silinirken hata oluştu: ' + error.message, true);
                             }
                         }
@@ -681,8 +770,9 @@
                     actionsCell.appendChild(deleteButton);
                     actionsCell.style.textAlign = 'center';
                 });
+                console.log("Collections loaded successfully for project:", projectId); // LOG
             } catch (error) {
-                console.error("Tahsilatlar yüklenirken hata oluştu: ", error);
+                console.error("Tahsilatlar yüklenirken hata oluştu: ", error); // LOG
                 showSystemMessage('Tahsilatlar yüklenirken hata oluştu: ' + error.message, true);
             }
         }
