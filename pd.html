@@ -441,6 +441,7 @@
                 document.getElementById('expenseDate').value = `${year}-${month}-${day}`;
                 document.getElementById('expenseCurrency').value = 'TRY';
                 document.getElementById('exchangeRate').value = '1';
+                expenseExchangeRateInput.readOnly = true; // TL seçili gelince readonly olsun
                 loadFinancialData(currentProjectId);
             } catch (error) {
                 console.error('Harcama eklerken hata:', error);
@@ -448,21 +449,14 @@
             }
         });
 
-        // Para birimi değişince kuru otomatik 1 yap
+        // Harcama Para birimi değişince kuru otomatik 1 yap veya aç
         expenseCurrencySelect.addEventListener('change', () => {
             if (expenseCurrencySelect.value === 'TRY') {
                 expenseExchangeRateInput.value = '1';
                 expenseExchangeRateInput.readOnly = true;
             } else {
-                expenseExchangeRateInput.readOnly = false;
-            }
-        });
-        collectionCurrencySelect.addEventListener('change', () => {
-            if (collectionCurrencySelect.value === 'TRY') {
-                collectionExchangeRateInput.value = '1';
-                collectionExchangeRateInput.readOnly = true;
-            } else {
-                collectionExchangeRateInput.readOnly = false;
+                expenseExchangeRateInput.value = '1'; // Diğer para birimleri için de başlangıç değeri 1 olsun
+                expenseExchangeRateInput.readOnly = false; // BURASI DÜZELTİLDİ
             }
         });
 
@@ -526,6 +520,7 @@
                 document.getElementById('collectionDate').value = `${year}-${month}-${day}`;
                 document.getElementById('collectionCurrency').value = 'TRY';
                 document.getElementById('collectionExchangeRate').value = '1';
+                collectionExchangeRateInput.readOnly = true; // TL seçili gelince readonly olsun
                 collectionTypeSelect.value = ''; // Tahsilat tipini sıfırla
                 checkDetailsDiv.style.display = 'none';
                 barterDetailsDiv.style.display = 'none';
@@ -535,6 +530,17 @@
             } catch (error) {
                 console.error('Tahsilat eklerken hata:', error);
                 showSystemMessage('Tahsilat eklenirken bir hata oluştu: ' + error.message, true);
+            }
+        });
+
+        // Tahsilat Para birimi değişince kuru otomatik 1 yap veya aç
+        collectionCurrencySelect.addEventListener('change', () => {
+            if (collectionCurrencySelect.value === 'TRY') {
+                collectionExchangeRateInput.value = '1';
+                collectionExchangeRateInput.readOnly = true;
+            } else {
+                collectionExchangeRateInput.value = '1'; // Diğer para birimleri için de başlangıç değeri 1 olsun
+                collectionExchangeRateInput.readOnly = false; // BURASI DÜZELTİLDİ
             }
         });
 
@@ -561,18 +567,13 @@
 
         // Finansal Verileri Yükle (Harcamalar, Tahsilatlar, Özet)
         async function loadFinancialData(projectId) {
-            expenseListBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Harcamalar yükleniyor...</td></tr>';
-            collectionListBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Tahsilatlar yükleniyor...</td></tr>';
-
-            let totalExp = 0;
-            let totalColl = 0;
-
             try {
-                // Harcamaları yükle
+                // Harcamaları getir
                 const expensesSnapshot = await db.collection('projects').doc(projectId).collection('expenses').orderBy('date', 'desc').get();
-                expenseListBody.innerHTML = '';
+                expenseListBody.innerHTML = ''; // Listeyi temizle
+                let totalExpenses = 0;
                 if (expensesSnapshot.empty) {
-                    expenseListBody.innerHTML = '<tr><td colspan="7" style="text-align:center; color: #666;">Henüz hiç harcama yok.</td></tr>';
+                    expenseListBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Henüz harcama eklenmedi.</td></tr>';
                 } else {
                     expensesSnapshot.forEach(doc => {
                         const expense = doc.data();
@@ -586,21 +587,22 @@
                         
                         const actionsCell = row.insertCell(6);
                         actionsCell.classList.add('actions-cell');
-                        const deleteButton = document.createElement('button');
-                        deleteButton.textContent = 'Sil';
-                        deleteButton.classList.add('delete-btn');
-                        deleteButton.addEventListener('click', () => deleteFinancialItem('expenses', doc.id, expense.description));
-                        actionsCell.appendChild(deleteButton);
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.textContent = 'Sil';
+                        deleteBtn.classList.add('delete-btn');
+                        deleteBtn.addEventListener('click', () => deleteFinancialItem('expenses', doc.id, expense.description));
+                        actionsCell.appendChild(deleteBtn);
 
-                        totalExp += expense.amountTL;
+                        totalExpenses += expense.amountTL;
                     });
                 }
 
-                // Tahsilatları yükle
+                // Tahsilatları getir
                 const collectionsSnapshot = await db.collection('projects').doc(projectId).collection('collections').orderBy('date', 'desc').get();
-                collectionListBody.innerHTML = '';
+                collectionListBody.innerHTML = ''; // Listeyi temizle
+                let totalCollections = 0;
                 if (collectionsSnapshot.empty) {
-                    collectionListBody.innerHTML = '<tr><td colspan="8" style="text-align:center; color: #666;">Henüz hiç tahsilat yok.</td></tr>';
+                    collectionListBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Henüz tahsilat eklenmedi.</td></tr>';
                 } else {
                     collectionsSnapshot.forEach(doc => {
                         const collection = doc.data();
@@ -611,71 +613,76 @@
                         row.insertCell(3).textContent = collection.currency;
                         row.insertCell(4).textContent = collection.exchangeRate.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
                         row.insertCell(5).textContent = collection.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                        row.insertCell(6).textContent = collection.collectionType || 'Belirtilmemiş';
                         
-                        // Tahsilat tipi ve detayları
-                        const typeCell = row.insertCell(6);
-                        let typeText = collection.collectionType;
-                        if (collection.collectionType === 'Çek' || collection.collectionType === 'Senet') {
-                            typeText += ` (No: ${collection.checkNumber}, Vade: ${collection.checkMaturityDate})`;
-                        } else if (collection.collectionType === 'Barter') {
-                            typeText += ` (Açıklama: ${collection.barterDescription.substring(0, 20)}...)`; // İlk 20 karakteri göster
-                        }
-                        typeCell.textContent = typeText;
-
                         const actionsCell = row.insertCell(7);
                         actionsCell.classList.add('actions-cell');
-                        const deleteButton = document.createElement('button');
-                        deleteButton.textContent = 'Sil';
-                        deleteButton.classList.add('delete-btn');
-                        deleteButton.addEventListener('click', () => deleteFinancialItem('collections', doc.id, collection.description));
-                        actionsCell.appendChild(deleteButton);
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.textContent = 'Sil';
+                        deleteBtn.classList.add('delete-btn');
+                        deleteBtn.addEventListener('click', () => deleteFinancialItem('collections', doc.id, collection.description));
+                        actionsCell.appendChild(deleteBtn);
 
-                        totalColl += collection.amountTL;
+                        totalCollections += collection.amountTL;
                     });
                 }
 
-                // Özet bilgilerini güncelle
-                totalExpensesTL.textContent = totalExp.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                totalCollectionsTL.textContent = totalColl.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                const remaining = totalColl - totalExp;
-                remainingBalanceTL.textContent = remaining.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                remainingBalanceTL.style.color = remaining >= 0 ? '#28a745' : '#dc3545'; // Pozitifse yeşil, negatifse kırmızı
+                // Özet verilerini güncelle
+                totalExpensesTL.textContent = totalExpenses.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                totalCollectionsTL.textContent = totalCollections.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                const remainingBalance = totalCollections - totalExpenses;
+                remainingBalanceTL.textContent = remainingBalance.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                remainingBalanceTL.classList.remove('positive', 'negative'); // Önceki sınıfları kaldır
+                remainingBalanceTL.classList.add(remainingBalance >= 0 ? 'positive' : 'negative');
 
-                updateBalanceChart(totalExp, totalColl);
+                // Grafiği güncelle
+                updateBalanceChart(totalCollections, totalExpenses);
 
             } catch (error) {
                 console.error('Finansal veriler yüklenirken hata oluştu:', error);
-                expenseListBody.innerHTML = '<tr><td colspan="7" style="color:red; text-align:center;">Harcamalar yüklenirken bir hata oluştu.</td></tr>';
-                collectionListBody.innerHTML = '<tr><td colspan="8" style="color:red; text-align:center;">Tahsilatlar yüklenirken bir hata oluştu.</td></tr>';
                 showSystemMessage('Finansal veriler yüklenirken bir hata oluştu: ' + error.message, true);
             }
         }
 
-        // Chart.js Grafiğini Güncelle
-        function updateBalanceChart(expenses, collections) {
+        // Chart.js ile bakiye grafiğini güncelle
+        function updateBalanceChart(collections, expenses) {
             const ctx = document.getElementById('balanceChart').getContext('2d');
+            
+            // Eğer daha önce bir grafik varsa yok et
             if (balanceChart) {
-                balanceChart.destroy(); // Önceki grafiği yok et
+                balanceChart.destroy();
             }
+
             balanceChart = new Chart(ctx, {
-                type: 'pie', // Pasta grafiği
+                type: 'bar',
                 data: {
-                    labels: ['Toplam Harcama (TL)', 'Toplam Tahsilat (TL)'],
+                    labels: ['Toplam Tahsilat', 'Toplam Harcama', 'Kalan Bakiye'],
                     datasets: [{
-                        data: [expenses, collections],
-                        backgroundColor: ['#e74c3c', '#28a745'], // Kırmızı (harcama), Yeşil (tahsilat)
-                        hoverOffset: 4
+                        label: 'Tutar (TL)',
+                        data: [collections, expenses, collections - expenses],
+                        backgroundColor: [
+                            'rgba(40, 167, 69, 0.7)', // Yeşil - Tahsilat
+                            'rgba(220, 53, 69, 0.7)',  // Kırmızı - Harcama
+                            (collections - expenses >= 0) ? 'rgba(0, 123, 255, 0.7)' : 'rgba(255, 193, 7, 0.7)' // Mavi/Sarı - Bakiye
+                        ],
+                        borderColor: [
+                            'rgba(40, 167, 69, 1)',
+                            'rgba(220, 53, 69, 1)',
+                            (collections - expenses >= 0) ? 'rgba(0, 123, 255, 1)' : 'rgba(255, 193, 7, 1)'
+                        ],
+                        borderWidth: 1
                     }]
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            position: 'top',
+                            display: false,
                         },
                         title: {
                             display: true,
-                            text: 'Gelir Gider Dağılımı',
+                            text: 'Proje Finansal Durumu',
                             font: {
                                 size: 16
                             }
@@ -683,14 +690,24 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    let label = context.label || '';
+                                    let label = context.dataset.label || '';
                                     if (label) {
                                         label += ': ';
                                     }
-                                    if (context.parsed !== null) {
-                                        label += context.parsed.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                                     }
                                     return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value, index, values) {
+                                    return value.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 });
                                 }
                             }
                         }
@@ -698,25 +715,25 @@
                 }
             });
         }
-
-        // Sayfa yüklendiğinde varsayılan tarihleri ayarla
+        
+        // Form yüklendiğinde bugünün tarihini ve TL varsayılanını ayarla
         document.addEventListener('DOMContentLoaded', () => {
             const today = new Date();
             const year = today.getFullYear();
             const month = String(today.getMonth() + 1).padStart(2, '0');
             const day = String(today.getDate()).padStart(2, '0');
+            const formattedDate = `${year}-${month}-${day}`;
 
-            document.getElementById('expenseDate').value = `${year}-${month}-${day}`;
-            document.getElementById('collectionDate').value = `${year}-${month}-${day}`;
+            document.getElementById('expenseDate').value = formattedDate;
+            document.getElementById('collectionDate').value = formattedDate;
 
-            // TL seçiliyse kuru kilitle
-            if (document.getElementById('expenseCurrency').value === 'TRY') {
-                document.getElementById('exchangeRate').readOnly = true;
-            }
-            if (document.getElementById('collectionCurrency').value === 'TRY') {
-                document.getElementById('collectionExchangeRate').readOnly = true;
-            }
+            // Kur alanlarını varsayılan olarak readonly ve 1 TL yap
+            expenseExchangeRateInput.value = '1';
+            expenseExchangeRateInput.readOnly = true;
+            collectionExchangeRateInput.value = '1';
+            collectionExchangeRateInput.readOnly = true;
         });
+
     </script>
 </body>
 </html>
