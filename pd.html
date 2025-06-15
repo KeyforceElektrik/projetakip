@@ -814,7 +814,19 @@
                     expensesSnapshot.forEach(doc => {
                         const expense = doc.data();
                         const row = expenseListBody.insertRow();
-                        row.insertCell(0).textContent = expense.date ? new Date(expense.date.toDate()).toLocaleDateString('tr-TR') : 'N/A'; // Tarihi formatla
+                        
+                        // ** Düzeltme: Tarih formatlama hatasını giderme **
+                        let formattedDate = 'N/A';
+                        if (expense.date) {
+                            if (typeof expense.date.toDate === 'function') { // Firebase Timestamp ise
+                                formattedDate = new Date(expense.date.toDate()).toLocaleDateString('tr-TR');
+                            } else if (typeof expense.date === 'string') { // String ise (eski kayıtlar için)
+                                formattedDate = new Date(expense.date).toLocaleDateString('tr-TR');
+                            }
+                        }
+                        row.insertCell(0).textContent = formattedDate;
+                        // ** Düzeltme sonu **
+
                         row.insertCell(1).textContent = expense.description;
                         row.insertCell(2).textContent = expense.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         row.insertCell(3).textContent = expense.currency;
@@ -843,7 +855,19 @@
                     collectionsSnapshot.forEach(doc => {
                         const collection = doc.data();
                         const row = collectionListBody.insertRow();
-                        row.insertCell(0).textContent = collection.date ? new Date(collection.date.toDate()).toLocaleDateString('tr-TR') : 'N/A';
+                        
+                        // ** Düzeltme: Tarih formatlama hatasını giderme **
+                        let formattedDate = 'N/A';
+                        if (collection.date) {
+                            if (typeof collection.date.toDate === 'function') { // Firebase Timestamp ise
+                                formattedDate = new Date(collection.date.toDate()).toLocaleDateString('tr-TR');
+                            } else if (typeof collection.date === 'string') { // String ise (eski kayıtlar için)
+                                formattedDate = new Date(collection.date).toLocaleDateString('tr-TR');
+                            }
+                        }
+                        row.insertCell(0).textContent = formattedDate;
+                        // ** Düzeltme sonu **
+
                         row.insertCell(1).textContent = collection.description;
                         row.insertCell(2).textContent = collection.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         row.insertCell(3).textContent = collection.currency;
