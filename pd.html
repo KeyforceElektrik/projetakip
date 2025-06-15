@@ -238,9 +238,6 @@
         const db = firebase.firestore();
 
         // ** CLOUD FUNCTION URL'İN BURADA! **
-        // Eğer bir Cloud Function kullanmıyorsanız bu URL'yi doğrudan TCMB XML linkine çevirmeniz gerekir.
-        // Ancak doğrudan tarayıcıdan farklı bir domain'e XML çekmek CORS hatasına neden olabilir.
-        // Bu yüzden bir Cloud Function (proxy) kullanmak en güvenli yoldur.
         const EXCHANGE_RATE_FUNCTION_URL = 'https://us-central1-projetakip-e3a75.cloudfunctions.net/getExchangeRate'; 
 
 
@@ -359,74 +356,29 @@
             }, 5000);
         }
 
-        // TCMB'den kur çeken fonksiyon
+        // TCMB'den kur çeken fonksiyon (Cloud Function üzerinden)
         async function fetchTCMBRates(dateString) {
-            const [year, month, day] = dateString.split('-');
-            const formattedMonth = month.padStart(2, '0');
-            const formattedDay = day.padStart(2, '0');
-            const tcmbUrl = `https://www.tcmb.gov.tr/kurlar/${year}${formattedMonth}/${formattedDay}${year}.xml`;
-            console.log(`TCMB URL: ${tcmbUrl}`); // Debug
-
             try {
-                // Burada doğrudan TCMB XML URL'ini kullanıyoruz.
-                // Eğer CORS hatası alırsanız, bu URL'yi sizin Cloud Function'ınızın URL'si ile değiştirmeniz gerekecektir.
-                // Örneğin: `const response = await fetch(`${EXCHANGE_RATE_FUNCTION_URL}?date=${dateString}`);`
-                const response = await fetch(tcmbUrl); 
-
-                if (!response.ok) {
-                    // Eğer direkt XML alınamıyorsa (CORS veya dosya yoksa), Cloud Function'ı deneyin (varsa).
-                    // Bu kısım, Cloud Function'ın düzgün çalıştığını varsayar.
-                    // Eğer Cloud Function'ınız yoksa bu kısmı kaldırın ve CORS hatasını yönetin.
-                    console.warn('Doğrudan TCMB XML çekilemedi, Cloud Function deneniyor...');
-                    try {
-                        const cloudFnResponse = await fetch(`${EXCHANGE_RATE_FUNCTION_URL}?date=${dateString}`);
-                        if (!cloudFnResponse.ok) {
-                            throw new Error(`Cloud Function'dan kur bilgisi alınamadı. Durum: ${cloudFnResponse.status}`);
-                        }
-                        const data = await cloudFnResponse.json(); // Cloud Function JSON döndürür
-                        console.log('Cloud Function yanıtı:', data);
-                        if (data && data.rates) {
-                            return data.rates;
-                        } else {
-                            throw new Error('Cloud Function geçersiz yanıt döndürdü.');
-                        }
-                    } catch (fnError) {
-                        console.error('Cloud Function hatası:', fnError);
-                        throw new Error(`Döviz kur bilgisi alınamadı: ${fnError.message}.`);
-                    }
+                const cloudFnResponse = await fetch(`${EXCHANGE_RATE_FUNCTION_URL}?date=${dateString}`);
+                if (!cloudFnResponse.ok) {
+                    // Cloud Function'dan dönen hata mesajını yakala
+                    const errorText = await cloudFnResponse.text();
+                    throw new Error(`Cloud Function'dan kur bilgisi alınamadı. Durum: ${cloudFnResponse.status} - ${errorText}`);
                 }
-                
-                // Eğer response.ok ise, yani doğrudan XML çekildiyse
-                const xmlText = await response.text();
-                return parseTCMBXml(xmlText);
-
+                const data = await cloudFnResponse.json(); // Cloud Function JSON döndürür
+                console.log('Cloud Function yanıtı:', data);
+                if (data && data.rates) {
+                    return data.rates;
+                } else {
+                    throw new Error('Cloud Function geçersiz yanıt döndürdü veya kur bilgisi içermiyor.');
+                }
             } catch (error) {
-                console.error('Döviz kur çekme hatası:', error);
+                console.error('Döviz kur çekme hatası (Cloud Function):', error);
                 showSystemMessage(`Döviz kur bilgisi çekilemedi: ${error.message}. Lütfen manuel giriniz veya daha sonra tekrar deneyiniz.`, true);
                 return null;
             }
         }
 
-        // XML'i parse eden yardımcı fonksiyon (TCMB XML yapısına özel)
-        function parseTCMBXml(xmlString) {
-            const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-
-            const rates = {};
-            const currencyElements = xmlDoc.querySelectorAll('Currency');
-
-            currencyElements.forEach(currencyEl => {
-                const currencyCode = currencyEl.getAttribute('CurrencyCode');
-                if (currencyCode === 'USD' || currencyCode === 'EUR') {
-                    const forexSelling = currencyEl.querySelector('ForexSelling');
-                    if (forexSelling) {
-                        rates[currencyCode] = parseFloat(forexSelling.textContent);
-                    }
-                }
-            });
-            console.log("Parsed Rates from XML:", rates); // Debug
-            return rates;
-        }
 
         // Proje Detaylarını Yükle
         async function loadProjectDetails(projectId) {
@@ -955,9 +907,9 @@
                                         label += ': ';
                                     }
                                     if (context.parsed.y !== null) {
-                                        label += context.parsed.y.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                                        label += context.parsed.y.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 2 });
                                     }
-                                    return label; // Tooltip'te etiket ve değerin doğru gösterilmesi için return ekledim
+                                    return label;
                                 }
                             }
                         }
