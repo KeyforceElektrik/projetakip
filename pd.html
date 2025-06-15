@@ -4,11 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title id="dynamicPageTitle">Proje Detayı</title>
-    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
-    <!-- Google Fonts - Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -28,11 +26,10 @@
 
         <div class="tab-buttons">
             <button class="tab-button active" data-tab="project-info">Proje Bilgileri</button>
-            <button class="tab-button" data-tab="expenses">Harcamalar</button>
-            <button class="tab-button" data-tab="collections">Tahsilatlar</button>
+            <button class="tab-button" data-tab="expenses" id="expensesTabButton">Harcamalar</button>
+            <button class="tab-button" data-tab="collections" id="collectionsTabButton">Tahsilatlar</button>
         </div>
 
-        <!-- Proje Bilgileri Sekmesi -->
         <div id="project-info" class="tab-content active">
             <h2 class="section-title">Proje Detayları</h2>
             <form id="projectForm">
@@ -62,9 +59,23 @@
                     </div>
                 </div>
 
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="contractAmount">Sözleşme Bedeli:</label>
+                        <input type="number" id="contractAmount" step="0.01" value="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="contractCurrency">Para Birimi:</label>
+                        <select id="contractCurrency">
+                            <option value="TRY">TRY</option>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="form-group">
-                    <label for="contractAmountTL">Sözleşme Bedeli (TL):</label>
-                    <input type="number" id="contractAmountTL" step="0.01" value="0" required>
+                    <label>Sözleşme Bedeli (TL Karşılığı): <span id="contractAmountTLDisplay">0.00 TL</span></label>
+                    <input type="hidden" id="contractAmountTL" value="0">
                 </div>
                 
                 <div class="form-group">
@@ -82,7 +93,6 @@
             </form>
         </div>
 
-        <!-- Harcamalar Sekmesi -->
         <div id="expenses" class="tab-content">
             <h2 class="section-title">Harcamalar</h2>
             <form id="expenseForm">
@@ -106,7 +116,7 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="expenseExchangeRate">Kur (1 ${expenseCurrency.value} = X TL):</label>
+                        <label for="expenseExchangeRate">Kur (1 <span id="currentExpenseCurrency">TRY</span> = X TL):</label>
                         <input type="number" id="expenseExchangeRate" step="0.0001" value="1" required>
                     </div>
                     <div class="form-group">
@@ -137,7 +147,6 @@
             </div>
         </div>
 
-        <!-- Tahsilatlar Sekmesi -->
         <div id="collections" class="tab-content">
             <h2 class="section-title">Tahsilatlar</h2>
             <form id="collectionForm">
@@ -188,7 +197,7 @@
                 </div>
                 <div class="form-row" id="collectionExchangeRateRow">
                     <div class="form-group">
-                        <label for="collectionExchangeRate">Kur (1 ${collectionCurrency.value} = X TL):</label>
+                        <label for="collectionExchangeRate">Kur (1 <span id="currentCollectionCurrency">TRY</span> = X TL):</label>
                         <input type="number" id="collectionExchangeRate" step="0.0001" value="1" required>
                     </div>
                     <div class="form-group">
@@ -228,9 +237,9 @@
     </div>
 
     <script>
-        // Firebase Konfigürasyonunuzu BURAYA YAPIŞTIRIN
+        // Firebase Konfigürasyonunuz (Artık sizin belirttiğiniz değerler kullanılıyor)
         const firebaseConfig = {
-            apiKey: "AIzaSyBNwSpbpNuQQ4nTjDAlB6izu5IgkEZxDL0", // Kendi API Key'iniz
+            apiKey: "AIzaSyBNwSpbpNuQQ4nTjDAlB6izu5IgkEZxDL0",
             authDomain: "projetakip-e3a75.firebaseapp.com",
             projectId: "projetakip-e3a75",
             storageBucket: "projetakip-e3a75.firebasestorage.app",
@@ -248,9 +257,11 @@
         const dynamicPageTitle = document.getElementById('dynamicPageTitle');
         const pageMainTitle = document.getElementById('pageMainTitle');
 
-
         const tabButtons = document.querySelectorAll('.tab-button');
         const tabContents = document.querySelectorAll('.tab-content');
+        const expensesTabButton = document.getElementById('expensesTabButton');
+        const collectionsTabButton = document.getElementById('collectionsTabButton');
+
 
         const projectForm = document.getElementById('projectForm');
         const projectNameInput = document.getElementById('projectName');
@@ -258,7 +269,10 @@
         const categoriesInput = document.getElementById('categories');
         const contractStartDateInput = document.getElementById('contractStartDate');
         const contractEndDateInput = document.getElementById('contractEndDate');
+        const contractAmountInput = document.getElementById('contractAmount'); // Yeni
+        const contractCurrencySelect = document.getElementById('contractCurrency'); // Yeni
         const contractAmountTLInput = document.getElementById('contractAmountTL'); 
+        const contractAmountTLDisplay = document.getElementById('contractAmountTLDisplay'); // Yeni
         const statusSelect = document.getElementById('status');
         const deleteProjectButton = document.getElementById('deleteProjectButton');
 
@@ -269,6 +283,7 @@
         const expenseExchangeRateInput = document.getElementById('expenseExchangeRate');
         const expenseDateInput = document.getElementById('expenseDate');
         const expensesTableBody = document.getElementById('expensesTableBody');
+        const currentExpenseCurrencySpan = document.getElementById('currentExpenseCurrency');
 
         const collectionForm = document.getElementById('collectionForm');
         const collectionTypeSelect = document.getElementById('collectionType');
@@ -288,10 +303,18 @@
         const collectionsTableBody = document.getElementById('collectionsTableBody');
         const collectionAmountCurrencyRow = document.getElementById('collectionAmountCurrencyRow');
         const collectionExchangeRateRow = document.getElementById('collectionExchangeRateRow');
+        const currentCollectionCurrencySpan = document.getElementById('currentCollectionCurrency');
 
 
         let currentProjectId = null;
         let currentUserId = null;
+
+        // TCMB kur bilgisi için CORS proxy URL'si
+        // DİKKAT: Bu herkesin erişebildiği bir proxy'dir, üretim ortamları için güvenli değildir.
+        // Kendi CORS proxy'nizi kurmanız önerilir.
+        const CORS_PROXY_URL = 'https://cors-anywhere.herokuapp.com/'; 
+        const TCMB_DAILY_EXCHANGE_RATE_URL = 'https://www.tcmb.gov.tr/kurlar/today.xml';
+
 
         // Sekme değiştirme fonksiyonu
         function showTab(tabId) {
@@ -318,7 +341,7 @@
             if (user) {
                 currentUserId = user.uid;
                 userEmailSpan.textContent = user.email;
-                console.log("Auth State Changed: User Logged In. UID:", currentUserId); // LOG
+                console.log("Auth State Changed: User Logged In. UID:", currentUserId);
 
                 const urlParams = new URLSearchParams(window.location.search);
                 currentProjectId = urlParams.get('id');
@@ -327,6 +350,10 @@
                     dynamicPageTitle.textContent = 'Proje Detayı ve Yönetimi';
                     pageMainTitle.textContent = 'Proje Detayı ve Yönetimi';
                     deleteProjectButton.style.display = 'inline-block';
+                    
+                    expensesTabButton.style.display = 'inline-block';
+                    collectionsTabButton.style.display = 'inline-block';
+
                     loadProjectData(currentProjectId);
                     loadExpenses(currentProjectId);
                     loadCollections(currentProjectId);
@@ -334,16 +361,22 @@
                     dynamicPageTitle.textContent = 'Yeni Proje Ekle';
                     pageMainTitle.textContent = 'Yeni Proje Ekle';
                     deleteProjectButton.style.display = 'none';
-                    // Yeni proje eklenirken sadece proje bilgileri sekmesini göster
+                    
                     showTab('project-info'); 
-                    // Harcama ve Tahsilat formlarını ve tablolarını gizle (yeni projede bunlar olmaz)
+                    // Yeni proje eklenirken harcama ve tahsilat sekmelerini gizle
                     document.getElementById('expenses').style.display = 'none';
                     document.getElementById('collections').style.display = 'none';
-                    document.querySelector('.tab-button[data-tab="expenses"]').style.display = 'none';
-                    document.querySelector('.tab-button[data-tab="collections"]').style.display = 'none';
+                    expensesTabButton.style.display = 'none';
+                    collectionsTabButton.style.display = 'none';
                 }
+                // Kur birim spanlarını ve diğer dinamik alanları ilk yüklemede doğru ayarla
+                expenseCurrencySelect.dispatchEvent(new Event('change'));
+                collectionTypeSelect.dispatchEvent(new Event('change')); 
+                collectionCurrencySelect.dispatchEvent(new Event('change')); 
+                contractCurrencySelect.dispatchEvent(new Event('change')); 
+
             } else {
-                console.log("Auth State Changed: User Logged Out. Redirecting to auth.html"); // LOG
+                console.log("Auth State Changed: User Logged Out. Redirecting to auth.html");
                 window.location.href = 'auth.html';
             }
         });
@@ -352,12 +385,46 @@
         logoutButton.addEventListener('click', async () => {
             try {
                 await auth.signOut();
-                console.log("User signed out."); // LOG
+                console.log("User signed out.");
             } catch (error) {
                 showSystemMessage('Çıkış yaparken hata oluştu: ' + error.message, true);
-                console.error("Logout Error:", error); // LOG
+                console.error("Logout Error:", error);
             }
         });
+
+        // Sözleşme Bedeli ve Para Birimi değiştiğinde TL karşılığını hesapla ve göster
+        function calculateContractAmountTL() {
+            const amount = parseFloat(contractAmountInput.value);
+            const currency = contractCurrencySelect.value;
+
+            if (isNaN(amount) || amount === 0) {
+                contractAmountTLInput.value = 0;
+                contractAmountTLDisplay.textContent = '0.00 TL';
+                return;
+            }
+
+            if (currency === 'TRY') {
+                contractAmountTLInput.value = amount;
+                contractAmountTLDisplay.textContent = amount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+            } else {
+                fetchExchangeRate(currency)
+                    .then(rate => {
+                        const amountTL = amount * rate;
+                        contractAmountTLInput.value = amountTL;
+                        contractAmountTLDisplay.textContent = amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                    })
+                    .catch(error => {
+                        console.error("Sözleşme TL karşılığı hesaplanırken kur hatası:", error);
+                        showSystemMessage(`Sözleşme kur bilgisi alınamadı (${currency}). Manuel giriniz veya internet bağlantınızı kontrol ediniz.`, true);
+                        contractAmountTLInput.value = 0; 
+                        contractAmountTLDisplay.textContent = '0.00 TL';
+                    });
+            }
+        }
+
+        // Event Listeners for Contract Amount Calculation
+        contractAmountInput.addEventListener('input', calculateContractAmountTL);
+        contractCurrencySelect.addEventListener('change', calculateContractAmountTL);
 
         // Proje Kaydet/Güncelle
         projectForm.addEventListener('submit', async (e) => {
@@ -368,11 +435,15 @@
             const categories = categoriesInput.value.split(',').map(cat => cat.trim()).filter(cat => cat !== '');
             const contractStartDate = contractStartDateInput.value;
             const contractEndDate = contractEndDateInput.value;
-            const contractAmountTL = parseFloat(contractAmountTLInput.value);
+            const contractAmount = parseFloat(contractAmountInput.value); 
+            const contractCurrency = contractCurrencySelect.value; 
+            const contractAmountTL = parseFloat(contractAmountTLInput.value); 
             const status = statusSelect.value;
             const createdAt = currentProjectId ? undefined : firebase.firestore.FieldValue.serverTimestamp();
             
+            const safeContractAmount = isNaN(contractAmount) ? 0 : contractAmount;
             const safeContractAmountTL = isNaN(contractAmountTL) ? 0 : contractAmountTL;
+
 
             const projectData = {
                 projectName,
@@ -380,7 +451,9 @@
                 categories,
                 contractStartDate,
                 contractEndDate,
-                contractAmountTL: safeContractAmountTL,
+                contractAmount: safeContractAmount, 
+                contractCurrency: contractCurrency, 
+                contractAmountTL: safeContractAmountTL, 
                 status,
                 userId: currentUserId
             };
@@ -390,50 +463,50 @@
             }
 
             try {
-                if (!currentUserId) { // Ek kontrol
+                if (!currentUserId) {
                     showSystemMessage('Lütfen önce giriş yapın.', true);
-                    console.error("Project save failed: currentUserId is null."); // LOG
+                    console.error("Project save failed: currentUserId is null.");
                     return;
                 }
 
                 if (currentProjectId) {
                     // Mevcut projeyi güncelle
-                    console.log("Attempting to update project:", currentProjectId, "at path:", db.collection('users').doc(currentUserId).collection('projects').doc(currentProjectId).path); // LOG
+                    console.log("Attempting to update project:", currentProjectId, "at path:", db.collection('users').doc(currentUserId).collection('projects').doc(currentProjectId).path);
                     await db.collection('users').doc(currentUserId).collection('projects').doc(currentProjectId).update(projectData);
                     showSystemMessage('Proje başarıyla güncellendi!');
-                    console.log("Project updated successfully."); // LOG
+                    console.log("Project updated successfully.");
                 } else {
                     // Yeni proje ekle
-                    console.log("Attempting to add new project for user:", currentUserId, "at path:", db.collection('users').doc(currentUserId).collection('projects').path); // LOG
+                    console.log("Attempting to add new project for user:", currentUserId, "at path:", db.collection('users').doc(currentUserId).collection('projects').path);
                     const docRef = await db.collection('users').doc(currentUserId).collection('projects').add(projectData);
                     currentProjectId = docRef.id;
                     showSystemMessage('Proje başarıyla eklendi!');
-                    console.log("New project added with ID:", currentProjectId); // LOG
+                    console.log("New project added with ID:", currentProjectId);
                     window.history.pushState({}, '', `pd.html?id=${currentProjectId}`);
                     // Yeni proje eklendikten sonra Harcama ve Tahsilat sekmelerini görünür yap
                     document.getElementById('expenses').style.display = 'block';
                     document.getElementById('collections').style.display = 'block';
-                    document.querySelector('.tab-button[data-tab="expenses"]').style.display = 'inline-block';
-                    document.querySelector('.tab-button[data-tab="collections"]').style.display = 'inline-block';
+                    expensesTabButton.style.display = 'inline-block';
+                    collectionsTabButton.style.display = 'inline-block';
                     // Sayfa başlıklarını güncelle
                     dynamicPageTitle.textContent = 'Proje Detayı ve Yönetimi';
                     pageMainTitle.textContent = 'Proje Detayı ve Yönetimi';
                     deleteProjectButton.style.display = 'inline-block';
                 }
             } catch (error) {
-                console.error("Proje kaydedilirken hata oluştu: ", error); // LOG
+                console.error("Proje kaydedilirken hata oluştu: ", error);
                 showSystemMessage('Proje kaydedilirken hata oluştu: ' + error.message, true);
             }
         });
 
         // Proje verilerini yükle
         async function loadProjectData(projectId) {
-            if (!currentUserId) { // Ek kontrol
-                console.warn("loadProjectData: currentUserId is null. User might not be authenticated yet."); // LOG
+            if (!currentUserId) {
+                console.warn("loadProjectData: currentUserId is null. User might not be authenticated yet.");
                 return;
             }
             const projectDocRef = db.collection('users').doc(currentUserId).collection('projects').doc(projectId);
-            console.log("Attempting to load project data from path:", projectDocRef.path); // LOG
+            console.log("Attempting to load project data from path:", projectDocRef.path);
 
             try {
                 const doc = await projectDocRef.get();
@@ -444,16 +517,21 @@
                     categoriesInput.value = (project.categories || []).join(', ');
                     contractStartDateInput.value = project.contractStartDate || '';
                     contractEndDateInput.value = project.contractEndDate || '';
+                    contractAmountInput.value = project.contractAmount || 0; 
+                    contractCurrencySelect.value = project.contractCurrency || 'TRY'; 
                     contractAmountTLInput.value = project.contractAmountTL || 0;
+                    contractAmountTLDisplay.textContent = (project.contractAmountTL || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                     statusSelect.value = project.status || 'Başlamadı';
-                    console.log("Project data loaded successfully for ID:", projectId); // LOG
+                    console.log("Project data loaded successfully for ID:", projectId);
+                    // Yüklendikten sonra TL karşılığını tekrar hesaplamaya zorla (kur değişmiş olabilir)
+                    calculateContractAmountTL();
                 } else {
                     showSystemMessage('Proje bulunamadı.', true);
-                    console.warn("Project with ID", projectId, "not found."); // LOG
+                    console.warn("Project with ID", projectId, "not found.");
                     window.location.href = 'index.html';
                 }
             } catch (error) {
-                console.error("Proje yüklenirken hata oluştu: ", error); // LOG
+                console.error("Proje yüklenirken hata oluştu: ", error);
                 showSystemMessage('Proje yüklenirken hata oluştu: ' + error.message, true);
             }
         }
@@ -461,12 +539,12 @@
         // Projeyi sil butonu
         deleteProjectButton.addEventListener('click', async () => {
             if (currentProjectId && confirm('Bu projeyi silmek istediğinizden emin misiniz? Harcamalar ve tahsilatlar da silinecektir.')) {
-                if (!currentUserId) { // Ek kontrol
+                if (!currentUserId) {
                     showSystemMessage('Lütfen önce giriş yapın.', true);
-                    console.error("Project deletion failed: currentUserId is null."); // LOG
+                    console.error("Project deletion failed: currentUserId is null.");
                     return;
                 }
-                console.log("Attempting to delete project and subcollections for ID:", currentProjectId); // LOG
+                console.log("Attempting to delete project and subcollections for ID:", currentProjectId);
                 try {
                     const projectRef = db.collection('users').doc(currentUserId).collection('projects').doc(currentProjectId);
 
@@ -474,30 +552,68 @@
                     const batch = db.batch();
                     expensesSnapshot.forEach(doc => {
                         batch.delete(doc.ref);
-                        console.log("Adding expense to batch for deletion:", doc.id); // LOG
+                        console.log("Adding expense to batch for deletion:", doc.id);
                     });
 
                     const collectionsSnapshot = await projectRef.collection('collections').get();
                     collectionsSnapshot.forEach(doc => {
                         batch.delete(doc.ref);
-                        console.log("Adding collection to batch for deletion:", doc.id); // LOG
+                        console.log("Adding collection to batch for deletion:", doc.id);
                     });
 
                     await batch.commit();
-                    console.log("Batch operations (expenses, collections deletion) committed."); // LOG
+                    console.log("Batch operations (expenses, collections deletion) committed.");
 
                     await projectRef.delete();
                     showSystemMessage('Proje başarıyla silindi!');
-                    console.log("Project", currentProjectId, "deleted successfully."); // LOG
+                    console.log("Project", currentProjectId, "deleted successfully.");
                     setTimeout(() => {
                         window.location.href = 'index.html';
                     }, 1500);
                 } catch (error) {
-                    console.error("Proje silinirken hata oluştu: ", error); // LOG
+                    console.error("Proje silinirken hata oluştu: ", error);
                     showSystemMessage('Proje silinirken hata oluştu: ' + error.message, true);
                 }
             }
         });
+
+        // TCMB'den kur çeken fonksiyon
+        async function fetchExchangeRate(currency) {
+            if (currency === 'TRY') {
+                return 1;
+            }
+
+            try {
+                const response = await fetch(CORS_PROXY_URL + TCMB_DAILY_EXCHANGE_RATE_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const text = await response.text();
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(text, "text/xml");
+                
+                const currencyNode = Array.from(xmlDoc.getElementsByTagName('Currency')).find(node => 
+                    node.getAttribute('CurrencyCode') === currency
+                );
+
+                if (currencyNode) {
+                    const unit = parseFloat(currencyNode.getElementsByTagName('Unit')[0]?.textContent || '1');
+                    const forexSelling = parseFloat(currencyNode.getElementsByTagName('ForexSelling')[0]?.textContent);
+                    
+                    if (forexSelling && !isNaN(forexSelling)) {
+                        return forexSelling / unit;
+                    } else {
+                        throw new Error(`Kur (${currency}) bulunamadı veya geçersiz.`);
+                    }
+                } else {
+                    throw new Error(`Kur (${currency}) XML içinde bulunamadı.`);
+                }
+            } catch (error) {
+                console.error("Kur alınırken hata oluştu:", error);
+                throw new Error(`Kur bilgisi alınamadı (${currency}). Lütfen elle giriniz. Hata: ${error.message}`);
+            }
+        }
+
 
         // Harcama Ekle
         expenseForm.addEventListener('submit', async (e) => {
@@ -506,9 +622,9 @@
                 showSystemMessage('Lütfen önce projeyi kaydedin.', true);
                 return;
             }
-            if (!currentUserId) { // Ek kontrol
+            if (!currentUserId) {
                 showSystemMessage('Lütfen önce giriş yapın.', true);
-                console.error("Expense save failed: currentUserId is null."); // LOG
+                console.error("Expense save failed: currentUserId is null.");
                 return;
             }
 
@@ -516,8 +632,8 @@
             const expenseAmount = parseFloat(expenseAmountInput.value);
             const expenseCurrency = expenseCurrencySelect.value;
             const expenseExchangeRate = parseFloat(expenseExchangeRateInput.value);
-            const expenseDate = expenseDateInput.value;
-
+            const expenseDate = expenseDateInput.getElementById('expenseDate') ? expenseDateInput.value : ''; // Check if element exists
+            
             const safeExpenseAmount = isNaN(expenseAmount) ? 0 : expenseAmount;
             const safeExpenseExchangeRate = isNaN(expenseExchangeRate) ? 1 : expenseExchangeRate;
             const expenseAmountTL = safeExpenseAmount * safeExpenseExchangeRate;
@@ -533,17 +649,19 @@
             };
 
             const expenseCollectionRef = db.collection('users').doc(currentUserId).collection('projects').doc(currentProjectId).collection('expenses');
-            console.log("Attempting to add expense to path:", expenseCollectionRef.path); // LOG
+            console.log("Attempting to add expense to path:", expenseCollectionRef.path);
 
             try {
                 await expenseCollectionRef.add(expenseData);
                 showSystemMessage('Harcama başarıyla eklendi!');
-                console.log("Expense added successfully."); // LOG
+                console.log("Expense added successfully.");
                 expenseForm.reset();
-                expenseExchangeRateInput.value = 1;
+                expenseExchangeRateInput.value = 1; // Kur alanını sıfırla
+                expenseCurrencySelect.value = 'TRY'; // Para birimini TRY'ye sıfırla
+                expenseCurrencySelect.dispatchEvent(new Event('change')); // Kur bilgisini güncelle
                 loadExpenses(currentProjectId);
             } catch (error) {
-                console.error("Harcama eklenirken hata oluştu: ", error); // LOG
+                console.error("Harcama eklenirken hata oluştu: ", error);
                 showSystemMessage('Harcama eklenirken hata oluştu: ' + error.message, true);
             }
         });
@@ -551,19 +669,19 @@
         // Harcamaları Yükle
         async function loadExpenses(projectId) {
             expensesTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Harcamalar yükleniyor...</td></tr>';
-            if (!currentUserId || !projectId) { // Ek kontrol
-                console.warn("loadExpenses: currentUserId or projectId is null. Skipping load."); // LOG
+            if (!currentUserId || !projectId) {
+                console.warn("loadExpenses: currentUserId or projectId is null. Skipping load.");
                 expensesTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Harcamalar yüklenemedi (Kullanıcı/Proje bilgisi eksik).</td></tr>';
                 return;
             }
             const expenseCollectionRef = db.collection('users').doc(currentUserId).collection('projects').doc(projectId).collection('expenses');
-            console.log("Attempting to load expenses from path:", expenseCollectionRef.path); // LOG
+            console.log("Attempting to load expenses from path:", expenseCollectionRef.path);
 
             try {
                 const snapshot = await expenseCollectionRef.orderBy('date', 'desc').get();
                 if (snapshot.empty) {
                     expensesTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Henüz harcama eklenmedi.</td></tr>';
-                    console.log("No expenses found for project:", projectId); // LOG
+                    console.log("No expenses found for project:", projectId);
                     return;
                 }
 
@@ -572,10 +690,10 @@
                     const expense = doc.data();
                     const row = expensesTableBody.insertRow();
                     row.insertCell(0).textContent = expense.description || '';
-                    row.insertCell(1).textContent = expense.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    row.insertCell(1).textContent = (expense.amount || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                     row.insertCell(2).textContent = expense.currency || 'TL';
-                    row.insertCell(3).textContent = expense.exchangeRate.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
-                    row.insertCell(4).textContent = expense.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                    row.insertCell(3).textContent = (expense.exchangeRate || 1).toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+                    row.insertCell(4).textContent = (expense.amountTL || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                     row.insertCell(5).textContent = expense.date || 'N/A';
 
                     const actionsCell = row.insertCell(6);
@@ -588,14 +706,14 @@
                                 showSystemMessage('Lütfen önce giriş yapın.', true);
                                 return;
                             }
-                            console.log("Attempting to delete expense:", doc.id, "from path:", expenseCollectionRef.doc(doc.id).path); // LOG
+                            console.log("Attempting to delete expense:", doc.id, "from path:", expenseCollectionRef.doc(doc.id).path);
                             try {
                                 await expenseCollectionRef.doc(doc.id).delete();
                                 showSystemMessage('Harcama başarıyla silindi.');
-                                console.log("Expense", doc.id, "deleted successfully."); // LOG
+                                console.log("Expense", doc.id, "deleted successfully.");
                                 loadExpenses(projectId);
                             } catch (error) {
-                                console.error("Harcama silinirken hata oluştu: ", error); // LOG
+                                console.error("Harcama silinirken hata oluştu: ", error);
                                 showSystemMessage('Harcama silinirken hata oluştu: ' + error.message, true);
                             }
                         }
@@ -603,12 +721,36 @@
                     actionsCell.appendChild(deleteButton);
                     actionsCell.style.textAlign = 'center';
                 });
-                console.log("Expenses loaded successfully for project:", projectId); // LOG
+                console.log("Expenses loaded successfully for project:", projectId);
             } catch (error) {
-                console.error("Harcamalar yüklenirken hata oluştu: ", error); // LOG
+                console.error("Harcamalar yüklenirken hata oluştu: ", error);
                 showSystemMessage('Harcamalar yüklenirken hata oluştu: ' + error.message, true);
             }
         }
+
+        // Harcama Para Birimi seçildiğinde Kur metnini güncelle ve kuru çek
+        expenseCurrencySelect.addEventListener('change', async () => {
+            const selectedCurrency = expenseCurrencySelect.value;
+            currentExpenseCurrencySpan.textContent = selectedCurrency;
+            
+            if (selectedCurrency === 'TRY') {
+                expenseExchangeRateInput.value = 1;
+                expenseExchangeRateInput.readOnly = true;
+            } else {
+                expenseExchangeRateInput.readOnly = false;
+                try {
+                    showSystemMessage(`Kur bilgisi çekiliyor (${selectedCurrency})...`);
+                    const rate = await fetchExchangeRate(selectedCurrency);
+                    expenseExchangeRateInput.value = rate.toFixed(4); // 4 ondalık basamakla göster
+                    showSystemMessage(`Kur bilgisi çekildi: 1 ${selectedCurrency} = ${rate.toFixed(4)} TL`);
+                } catch (error) {
+                    showSystemMessage(`Kur bilgisi alınamadı (${selectedCurrency}). Lütfen elle giriniz.`, true);
+                    expenseExchangeRateInput.value = ''; // Kur çekilemezse boş bırak
+                    console.error("Harcama Kur alma hatası:", error);
+                }
+            }
+        });
+
 
         // Tahsilat Tipi Değişikliğinde Ek Alanları Göster/Gizle
         collectionTypeSelect.addEventListener('change', () => {
@@ -629,9 +771,42 @@
                 barterValueTLGroup.style.display = 'block';
                 collectionAmountCurrencyRow.style.display = 'none';
                 collectionExchangeRateRow.style.display = 'none';
+            }
+            // Alanları temizle (önceden girilmiş değerler kalmasın)
+            checkNumberInput.value = '';
+            checkDueDateInput.value = '';
+            barterAssetInput.value = '';
+            barterValueTLInput.value = 0;
+            collectionAmountInput.value = 0;
+            collectionExchangeRateInput.value = 1;
+            collectionCurrencySelect.value = 'TRY';
+            currentCollectionCurrencySpan.textContent = 'TRY'; // Metni de sıfırla
+            collectionCurrencySelect.dispatchEvent(new Event('change')); // Kur bilgisini güncelle (Barter seçilse bile başlangıçta TRY olarak ayarlar)
+        });
 
+        // Tahsilat Para Birimi seçildiğinde Kur metnini güncelle ve kuru çek
+        collectionCurrencySelect.addEventListener('change', async () => {
+            const selectedCurrency = collectionCurrencySelect.value;
+            currentCollectionCurrencySpan.textContent = selectedCurrency;
+
+            if (selectedCurrency === 'TRY') {
+                collectionExchangeRateInput.value = 1;
+                collectionExchangeRateInput.readOnly = true;
+            } else {
+                collectionExchangeRateInput.readOnly = false;
+                try {
+                    showSystemMessage(`Kur bilgisi çekiliyor (${selectedCurrency})...`);
+                    const rate = await fetchExchangeRate(selectedCurrency);
+                    collectionExchangeRateInput.value = rate.toFixed(4);
+                    showSystemMessage(`Kur bilgisi çekildi: 1 ${selectedCurrency} = ${rate.toFixed(4)} TL`);
+                } catch (error) {
+                    showSystemMessage(`Kur bilgisi alınamadı (${selectedCurrency}). Lütfen elle giriniz.`, true);
+                    collectionExchangeRateInput.value = ''; 
+                    console.error("Tahsilat Kur alma hatası:", error);
+                }
             }
         });
+
 
         // Tahsilat Ekle
         collectionForm.addEventListener('submit', async (e) => {
@@ -640,9 +815,9 @@
                 showSystemMessage('Lütfen önce projeyi kaydedin.', true);
                 return;
             }
-            if (!currentUserId) { // Ek kontrol
+            if (!currentUserId) {
                 showSystemMessage('Lütfen önce giriş yapın.', true);
-                console.error("Collection save failed: currentUserId is null."); // LOG
+                console.error("Collection save failed: currentUserId is null.");
                 return;
             }
 
@@ -651,16 +826,15 @@
             const collectionDate = collectionDateInput.value;
 
             let collectionAmount, collectionCurrency, collectionExchangeRate, collectionAmountTL;
-            let checkNumber, checkDueDate, barterAsset, barterValueTL;
+            let checkNumber = null, checkDueDate = null, barterAsset = null, barterValueTL = null;
 
             if (collectionType === 'Barter') {
                 barterAsset = barterAssetInput.value;
                 barterValueTL = parseFloat(barterValueTLInput.value);
-                collectionAmount = barterValueTL;
-                collectionCurrency = 'TL';
-                collectionExchangeRate = 1;
+                collectionAmount = barterValueTL; 
+                collectionCurrency = 'TRY'; 
+                collectionExchangeRate = 1; 
                 collectionAmountTL = barterValueTL;
-
             } else {
                 collectionAmount = parseFloat(collectionAmountInput.value);
                 collectionCurrency = collectionCurrencySelect.value;
@@ -677,30 +851,31 @@
                 type: collectionType,
                 description: collectionDescription,
                 date: collectionDate,
-                amount: collectionAmount,
+                amount: isNaN(collectionAmount) ? 0 : collectionAmount,
                 currency: collectionCurrency,
-                exchangeRate: collectionExchangeRate,
-                amountTL: collectionAmountTL,
-                checkNumber: checkNumber || null,
-                checkDueDate: checkDueDate || null,
-                barterAsset: barterAsset || null,
-                barterValueTL: barterValueTL || null,
+                exchangeRate: isNaN(collectionExchangeRate) ? 1 : collectionExchangeRate,
+                amountTL: isNaN(collectionAmountTL) ? 0 : collectionAmountTL,
+                checkNumber: checkNumber,
+                checkDueDate: checkDueDate,
+                barterAsset: barterAsset,
+                barterValueTL: isNaN(barterValueTL) ? null : barterValueTL,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
 
             const collectionCollectionRef = db.collection('users').doc(currentUserId).collection('projects').doc(currentProjectId).collection('collections');
-            console.log("Attempting to add collection to path:", collectionCollectionRef.path); // LOG
+            console.log("Attempting to add collection to path:", collectionCollectionRef.path);
 
             try {
                 await collectionCollectionRef.add(collectionData);
                 showSystemMessage('Tahsilat başarıyla eklendi!');
-                console.log("Collection added successfully."); // LOG
+                console.log("Collection added successfully.");
                 collectionForm.reset();
                 collectionExchangeRateInput.value = 1;
-                collectionTypeSelect.dispatchEvent(new Event('change'));
+                collectionCurrencySelect.value = 'TRY'; 
+                collectionTypeSelect.dispatchEvent(new Event('change')); // Tüm alanları sıfırlamak ve gizlemek için tetikle
                 loadCollections(currentProjectId);
             } catch (error) {
-                console.error("Tahsilat eklenirken hata oluştu: ", error); // LOG
+                console.error("Tahsilat eklenirken hata oluştu: ", error);
                 showSystemMessage('Tahsilat eklenirken hata oluştu: ' + error.message, true);
             }
         });
@@ -708,19 +883,19 @@
         // Tahsilatları Yükle
         async function loadCollections(projectId) {
             collectionsTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Tahsilatlar yükleniyor...</td></tr>';
-            if (!currentUserId || !projectId) { // Ek kontrol
-                console.warn("loadCollections: currentUserId or projectId is null. Skipping load."); // LOG
+            if (!currentUserId || !projectId) {
+                console.warn("loadCollections: currentUserId or projectId is null. Skipping load.");
                 collectionsTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Tahsilatlar yüklenemedi (Kullanıcı/Proje bilgisi eksik).</td></tr>';
                 return;
             }
             const collectionCollectionRef = db.collection('users').doc(currentUserId).collection('projects').doc(projectId).collection('collections');
-            console.log("Attempting to load collections from path:", collectionCollectionRef.path); // LOG
+            console.log("Attempting to load collections from path:", collectionCollectionRef.path);
 
             try {
                 const snapshot = await collectionCollectionRef.orderBy('date', 'desc').get();
                 if (snapshot.empty) {
                     collectionsTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Henüz tahsilat eklenmedi.</td></tr>';
-                    console.log("No collections found for project:", projectId); // LOG
+                    console.log("No collections found for project:", projectId);
                     return;
                 }
 
@@ -734,16 +909,16 @@
                     row.insertCell(3).textContent = collection.checkDueDate || collection.barterAsset || 'N/A';
                     
                     if (collection.type === 'Barter') {
-                        row.insertCell(4).textContent = 'N/A';
-                        row.insertCell(5).textContent = 'N/A';
-                        row.insertCell(6).textContent = 'N/A';
+                        row.insertCell(4).textContent = 'N/A'; // Miktar
+                        row.insertCell(5).textContent = 'N/A'; // P.B.
+                        row.insertCell(6).textContent = 'N/A'; // Kur
                     } else {
-                        row.insertCell(4).textContent = collection.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        row.insertCell(4).textContent = (collection.amount || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         row.insertCell(5).textContent = collection.currency || 'TL';
-                        row.insertCell(6).textContent = collection.exchangeRate.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+                        row.insertCell(6).textContent = (collection.exchangeRate || 1).toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
                     }
                     
-                    row.insertCell(7).textContent = collection.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                    row.insertCell(7).textContent = (collection.amountTL || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
 
                     const actionsCell = row.insertCell(8);
                     const deleteButton = document.createElement('button');
@@ -755,14 +930,14 @@
                                 showSystemMessage('Lütfen önce giriş yapın.', true);
                                 return;
                             }
-                            console.log("Attempting to delete collection:", doc.id, "from path:", collectionCollectionRef.doc(doc.id).path); // LOG
+                            console.log("Attempting to delete collection:", doc.id, "from path:", collectionCollectionRef.doc(doc.id).path);
                             try {
                                 await collectionCollectionRef.doc(doc.id).delete();
                                 showSystemMessage('Tahsilat başarıyla silindi.');
-                                console.log("Collection", doc.id, "deleted successfully."); // LOG
+                                console.log("Collection", doc.id, "deleted successfully.");
                                 loadCollections(projectId);
                             } catch (error) {
-                                console.error("Tahsilat silinirken hata oluştu: ", error); // LOG
+                                console.error("Tahsilat silinirken hata oluştu: ", error);
                                 showSystemMessage('Tahsilat silinirken hata oluştu: ' + error.message, true);
                             }
                         }
@@ -770,9 +945,9 @@
                     actionsCell.appendChild(deleteButton);
                     actionsCell.style.textAlign = 'center';
                 });
-                console.log("Collections loaded successfully for project:", projectId); // LOG
+                console.log("Collections loaded successfully for project:", projectId);
             } catch (error) {
-                console.error("Tahsilatlar yüklenirken hata oluştu: ", error); // LOG
+                console.error("Tahsilatlar yüklenirken hata oluştu: ", error);
                 showSystemMessage('Tahsilatlar yüklenirken hata oluştu: ' + error.message, true);
             }
         }
@@ -792,8 +967,10 @@
             }, 5000);
         }
 
-        // Sayfa yüklendiğinde bir kez çalıştır
-        collectionTypeSelect.dispatchEvent(new Event('change'));
+        // Sayfa yüklendiğinde bir kez çalıştır (bazı formların başlangıç durumunu ayarlamak için)
+        document.addEventListener('DOMContentLoaded', () => {
+             // auth.onAuthStateChanged içinde bu çağrılar var
+        });
     </script>
 </body>
 </html>
