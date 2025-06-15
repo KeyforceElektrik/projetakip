@@ -268,10 +268,11 @@
         const addCollectionForm = document.getElementById('addCollectionForm');
         const collectionListBody = document.getElementById('collectionListBody');
 
+        // BURASI ÖNEMLİ: Kur input'larını doğru ID'leriyle tanımlıyoruz
         const expenseCurrencySelect = document.getElementById('expenseCurrency');
-        const expenseExchangeRateInput = document.getElementById('exchangeRate');
+        const expenseExchangeRateInput = document.getElementById('exchangeRate'); // Bu satırı ekleyin/doğrulayın
         const collectionCurrencySelect = document.getElementById('collectionCurrency');
-        const collectionExchangeRateInput = document.getElementById('collectionExchangeRate');
+        const collectionExchangeRateInput = document.getElementById('collectionExchangeRate'); // Bu satırı ekleyin/doğrulayın
 
         const totalExpensesTL = document.getElementById('totalExpensesTL');
         const totalCollectionsTL = document.getElementById('totalCollectionsTL');
@@ -728,10 +729,14 @@
             document.getElementById('collectionDate').value = formattedDate;
 
             // Kur alanlarını varsayılan olarak readonly ve 1 TL yap
-            expenseExchangeRateInput.value = '1';
-            expenseExchangeRateInput.readOnly = true;
-            collectionExchangeRateInput.value = '1';
-            collectionExchangeRateInput.readOnly = true;
+            if (expenseExchangeRateInput) { // Kontrol ekledik
+                expenseExchangeRateInput.value = '1';
+                expenseExchangeRateInput.readOnly = true;
+            }
+            if (collectionExchangeRateInput) { // Kontrol ekledik
+                collectionExchangeRateInput.value = '1';
+                collectionExchangeRateInput.readOnly = true;
+            }
         });
 
     </script>
