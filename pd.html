@@ -6,7 +6,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title id="pageTitle">Proje Detayları</title>
+    <title>Proje Detayları</title>
+    <!-- Favicon hatasını gidermek için boş bir simge -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'></svg>">
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
@@ -171,13 +173,13 @@
                 </div>
                 <div id="checkDetailsDiv" class="form-group full-width" style="display: none;">
                     <label for="checkNumber">Çek/Senet Numarası:</label>
-                    <input type="text" id="checkNumber" required>
+                    <input type="text" id="checkNumber">
                     <label for="checkMaturityDate">Vade Tarihi:</label>
-                    <input type="date" id="checkMaturityDate" required>
+                    <input type="date" id="checkMaturityDate">
                 </div>
                 <div id="barterDetailsDiv" class="form-group full-width" style="display: none;">
                     <label for="barterDescription">Barter Açıklaması:</label>
-                    <textarea id="barterDescription" rows="3" required></textarea>
+                    <textarea id="barterDescription" rows="3"></textarea>
                 </div>
                 <div class="form-group full-width">
                     <button type="submit" class="button primary">Tahsilat Ekle</button>
@@ -253,7 +255,6 @@
         const userEmailSpan = document.getElementById('userEmail');
         const logoutButton = document.getElementById('logoutButton');
         const systemMessageDiv = document.getElementById('systemMessage');
-        const pageTitle = document.getElementById('pageTitle');
         const projectHeaderTitle = document.getElementById('projectHeaderTitle');
         const projectSummaryName = document.getElementById('projectSummaryName');
         const projectSummaryCustomer = document.getElementById('projectSummaryCustomer');
@@ -286,6 +287,9 @@
         const collectionTypeSelect = document.getElementById('collectionType');
         const checkDetailsDiv = document.getElementById('checkDetailsDiv');
         const barterDetailsDiv = document.getElementById('barterDetailsDiv');
+        const checkNumberInput = document.getElementById('checkNumber');
+        const checkMaturityDateInput = document.getElementById('checkMaturityDate');
+        const barterDescriptionTextarea = document.getElementById('barterDescription');
         const expenseDateInput = document.getElementById('expenseDate');
         const collectionDateInput = document.getElementById('collectionDate');
 
@@ -345,19 +349,14 @@
             try {
                 const cloudFnResponse = await fetch(`${EXCHANGE_RATE_FUNCTION_URL}?date=${dateString}`);
                 if (!cloudFnResponse.ok) {
-                    const errorText = await cloudFnResponse.text();
-                    throw new Error(`Cloud Function'dan kur bilgisi alınamadı. Durum: ${cloudFnResponse.status} - ${errorText}`);
+                    throw new Error(`Kur bilgisi alınamadı. HTTP ${cloudFnResponse.status}`);
                 }
                 const data = await cloudFnResponse.json();
-                if (data && data.rates) {
-                    return data.rates;
-                } else {
-                    throw new Error('Cloud Function geçersiz yanıt döndürdü veya kur bilgisi içermiyor.');
-                }
+                return data.rates || {};
             } catch (error) {
-                console.error('Döviz kur çekme hatası (Cloud Function):', error);
-                showSystemMessage(`Döviz kur bilgisi çekilemedi: ${error.message}. Lütfen manuel giriniz veya daha sonra tekrar deneyiniz.`, true);
-                return null;
+                console.error('Kur çekme hatası:', error);
+                showSystemMessage(`Kur bilgisi alınamadı: ${error.message}. Manuel giriniz.`, true);
+                return {};
             }
         }
 
@@ -366,7 +365,6 @@
                 const projectDoc = await db.collection('projects').doc(projectId).get();
                 if (projectDoc.exists && projectDoc.data().ownerId === currentUserId) {
                     const project = projectDoc.data();
-                    pageTitle.textContent = `${project.projectName} - Detaylar`;
                     projectHeaderTitle.textContent = `${project.projectName} Detayları`;
                     projectSummaryName.textContent = project.projectName;
                     projectSummaryCustomer.textContent = project.customerName;
@@ -564,19 +562,19 @@
             let amountTL = amount;
 
             if (collectionType === 'Çek' || collectionType === 'Senet') {
-                checkNumber = document.getElementById('checkNumber').value;
-                checkMaturityDate = document.getElementById('checkMaturityDate').value; // ✅ DÜZELTİLDİ
+                checkNumber = document.getElementById('checkNumber').value.trim();
+                checkMaturityDate = document.getElementById('checkMaturityDate').value;
                 if (!checkNumber || !checkMaturityDate) {
                     showSystemMessage('Çek/Senet numarası ve vade tarihi zorunludur.', true);
                     return;
                 }
             } else if (collectionType === 'Barter') {
-                barterDescription = document.getElementById('barterDescription').value;
+                barterDescription = document.getElementById('barterDescription').value.trim();
                 if (!barterDescription) {
                     showSystemMessage('Barter açıklaması zorunludur.', true);
                     return;
                 }
-                amountTL = amount; // Barter'da TL'ye çevrilmez
+                amountTL = amount; // Barter'da TL olarak kabul edilir
             } else {
                 amountTL = amount * exchangeRate;
             }
@@ -666,6 +664,7 @@
             const selectedType = collectionTypeSelect.value;
             checkDetailsDiv.style.display = 'none';
             barterDetailsDiv.style.display = 'none';
+
             if (selectedType === 'Çek' || selectedType === 'Senet') {
                 checkDetailsDiv.style.display = 'block';
             } else if (selectedType === 'Barter') {
@@ -673,8 +672,12 @@
                 collectionCurrencySelect.value = 'TRY';
                 collectionExchangeRateInput.value = '1';
                 collectionExchangeRateGroup.style.display = 'none';
+            } else {
+                if (collectionCurrencySelect.value !== 'TRY') {
+                    collectionExchangeRateGroup.style.display = 'block';
+                    collectionCurrencySelect.dispatchEvent(new Event('change'));
+                }
             }
-            collectionCurrencySelect.dispatchEvent(new Event('change'));
         });
 
         async function deleteFinancialItem(collectionName, docId, description) {
@@ -844,8 +847,8 @@
             const formattedDate = `${year}-${month}-${day}`;
             document.getElementById('expenseDate').value = formattedDate;
             document.getElementById('collectionDate').value = formattedDate;
-            if (expenseExchangeRateGroup) expenseExchangeRateGroup.style.display = 'none';
-            if (collectionExchangeRateGroup) collectionExchangeRateGroup.style.display = 'none';
+            expenseExchangeRateGroup.style.display = 'none';
+            collectionExchangeRateGroup.style.display = 'none';
             checkDetailsDiv.style.display = 'none';
             barterDetailsDiv.style.display = 'none';
         });
