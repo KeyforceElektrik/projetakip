@@ -422,8 +422,20 @@
                 </select>
             </div>
             <div class="form-group">
-                <label for="updateContractAmountTL">Sözleşme Bedeli (TL):</label>
-                <input type="number" id="updateContractAmountTL" step="0.01" value="0" required>
+                <label for="updateContractAmount">Sözleşme Bedeli:</label>
+                <input type="number" id="updateContractAmount" step="0.01" value="0" required>
+            </div>
+            <div class="form-group">
+                <label for="updateContractCurrency">Para Birimi:</label>
+                <select id="updateContractCurrency" required>
+                    <option value="TRY">TL</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                </select>
+            </div>
+            <div class="form-group" id="updateContractExchangeRateGroup" style="display: none;">
+                <label for="updateContractExchangeRate">Kur (1 USD/EUR = ... TL):</label>
+                <input type="number" id="updateContractExchangeRate" step="0.0001" value="1" readonly required>
             </div>
             <div class="form-group full-width">
                 <button type="submit" class="button primary">Proje Bilgilerini Güncelle</button>
@@ -456,8 +468,8 @@
                     </select>
                 </div>
                 <div class="form-group" id="expenseExchangeRateGroup">
-                    <label for="exchangeRate">Kur (1 USD/EUR = ... TL):</label>
-                    <input type="number" id="exchangeRate" step="0.0001" value="1" readonly required>
+                    <label for="expenseExchangeRate">Kur (1 USD/EUR = ... TL):</label>
+                    <input type="number" id="expenseExchangeRate" step="0.0001" value="1" readonly required>
                 </div>
                 <div class="form-group">
                     <label for="expenseDate">Tarih:</label>
@@ -608,7 +620,7 @@
         const db = firebase.firestore();
 
         // ** CLOUD FUNCTION URL'İN BURADA! **
-        const EXCHANGE_RATE_FUNCTION_URL = 'https://us-central1-projetakip-e3a75.cloudfunctions.net/getExchangeRate'; 
+        const EXCHANGE_RATE_FUNCTION_URL = 'https://us-central1-projetakip-e3a75.cloudfunctions.net/getExchangeRate';
 
         let currentProjectId = null;
         let currentUserId = null;
@@ -631,7 +643,11 @@
         const updateProjectNameInput = document.getElementById('updateProjectName');
         const updateCustomerNameInput = document.getElementById('updateCustomerName');
         const updateStatusSelect = document.getElementById('updateStatus');
-        const updateContractAmountTLInput = document.getElementById('updateContractAmountTL');
+        const updateContractAmountInput = document.getElementById('updateContractAmount');
+        const updateContractCurrencySelect = document.getElementById('updateContractCurrency');
+        const updateContractExchangeRateInput = document.getElementById('updateContractExchangeRate');
+        const updateContractExchangeRateGroup = document.getElementById('updateContractExchangeRateGroup');
+
 
         const tabButtons = document.querySelectorAll('.tab-button');
         const tabContents = document.querySelectorAll('.tab-content');
@@ -643,7 +659,7 @@
 
         // Kur input'ları ve Para Birimi Seçiciler
         const expenseCurrencySelect = document.getElementById('expenseCurrency');
-        const expenseExchangeRateInput = document.getElementById('exchangeRate'); // Harcama kur inputu
+        const expenseExchangeRateInput = document.getElementById('expenseExchangeRate'); // Harcama kur inputu
         const expenseExchangeRateGroup = document.getElementById('expenseExchangeRateGroup'); // Harcama kur grubunu gizle/göster
 
         const collectionCurrencySelect = document.getElementById('collectionCurrency');
@@ -693,6 +709,7 @@
                 // Kur alanlarının başlangıç durumunu ayarla (TRY seçiliyken gizli)
                 expenseExchangeRateGroup.style.display = 'none';
                 collectionExchangeRateGroup.style.display = 'none';
+                updateContractExchangeRateGroup.style.display = 'none';
 
             } else {
                 window.location.href = 'auth.html';
@@ -766,542 +783,403 @@
                     projectSummaryName.textContent = project.projectName;
                     projectSummaryCustomer.textContent = project.customerName;
                     projectSummaryCategories.textContent = (project.categories && project.categories.length > 0) ? project.categories.join(', ') : 'Belirtilmemiş';
-                    
+
                     // Durum badge sınıfını güncelle
                     projectSummaryStatus.textContent = project.status;
                     projectSummaryStatus.className = 'status-badge status-' + project.status.toLowerCase().replace(/ /g, '');
                     
-                    projectSummaryContractAmount.textContent = project.contractAmountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                    // Sözleşme bedeli gösterimini güncelle
+                    let formattedAmount = '';
+                    if (project.contractCurrency === 'TRY') {
+                        formattedAmount = project.contractAmount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                    } else if (project.contractCurrency === 'USD') {
+                        formattedAmount = project.contractAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+                    } else if (project.contractCurrency === 'EUR') {
+                        formattedAmount = project.contractAmount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                    } else {
+                        formattedAmount = `${project.contractAmount} ${project.contractCurrency || ''}`;
+                    }
+                    projectSummaryContractAmount.textContent = formattedAmount;
 
                     // Form alanlarını doldur
                     updateProjectNameInput.value = project.projectName;
                     updateCustomerNameInput.value = project.customerName;
                     updateStatusSelect.value = project.status;
-                    updateContractAmountTLInput.value = project.contractAmountTL;
+                    updateContractAmountInput.value = project.contractAmount || 0;
+                    updateContractCurrencySelect.value = project.contractCurrency || 'TRY';
+
+                    // Eğer para birimi TL değilse kur alanını göster
+                    if (project.contractCurrency !== 'TRY') {
+                        updateContractExchangeRateGroup.style.display = 'flex';
+                        updateContractExchangeRateInput.value = project.contractExchangeRate || 1;
+                    } else {
+                        updateContractExchangeRateGroup.style.display = 'none';
+                    }
 
                     showSystemMessage('Proje detayları yüklendi.', false);
 
                 } else {
-                    showSystemMessage('Proje bulunamadı veya bu projeyi görüntüleme yetkiniz yok.', true);
+                    showSystemMessage('Proje bulunamadı veya erişim yetkiniz yok. Ana sayfaya yönlendiriliyorsunuz...', true);
                     setTimeout(() => { window.location.href = 'index.html'; }, 3000);
                 }
             } catch (error) {
-                console.error('Proje detayları yüklenirken hata oluştu:', error);
+                console.error("Proje detaylarını yüklerken hata oluştu:", error);
                 showSystemMessage('Proje detayları yüklenirken bir hata oluştu: ' + error.message, true);
             }
         }
 
-        // Proje Güncelle Formu Gönderimi
+
+        // Finansal Verileri Yükle
+        async function loadFinancialData(projectId) {
+            try {
+                // Harcamaları yükle
+                const expensesSnapshot = await db.collection('expenses').where('projectId', '==', projectId).orderBy('date', 'desc').get();
+                let totalExpenses = 0;
+                expenseListBody.innerHTML = '';
+                if (expensesSnapshot.empty) {
+                    expenseListBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Henüz harcama eklenmedi.</td></tr>';
+                } else {
+                    expensesSnapshot.forEach(doc => {
+                        const expense = doc.data();
+                        const expenseAmountTL = expense.currency === 'TRY' ? expense.amount : expense.amount * expense.exchangeRate;
+                        totalExpenses += expenseAmountTL;
+
+                        let formattedAmount = '';
+                        if (expense.currency === 'TRY') {
+                            formattedAmount = expense.amount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                        } else if (expense.currency === 'USD') {
+                            formattedAmount = expense.amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+                        } else if (expense.currency === 'EUR') {
+                            formattedAmount = expense.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                        }
+
+                        const row = `
+                            <tr>
+                                <td>${expense.date}</td>
+                                <td>${expense.description}</td>
+                                <td>${formattedAmount}</td>
+                                <td>${expense.currency}</td>
+                                <td>${expense.currency !== 'TRY' ? expense.exchangeRate.toFixed(4) : '-'}</td>
+                                <td>${expenseAmountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })}</td>
+                                <td class="actions-cell">
+                                    <button class="delete-btn" data-id="${doc.id}" data-type="expense">Sil</button>
+                                </td>
+                            </tr>
+                        `;
+                        expenseListBody.innerHTML += row;
+                    });
+                }
+                totalExpensesTL.textContent = totalExpenses.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+
+                // Tahsilatları yükle
+                const collectionsSnapshot = await db.collection('collections').where('projectId', '==', projectId).orderBy('date', 'desc').get();
+                let totalCollections = 0;
+                collectionListBody.innerHTML = '';
+                if (collectionsSnapshot.empty) {
+                    collectionListBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Henüz tahsilat eklenmedi.</td></tr>';
+                } else {
+                    collectionsSnapshot.forEach(doc => {
+                        const collection = doc.data();
+                        const collectionAmountTL = collection.currency === 'TRY' ? collection.amount : collection.amount * collection.exchangeRate;
+                        totalCollections += collectionAmountTL;
+                        
+                        let formattedAmount = '';
+                        if (collection.currency === 'TRY') {
+                            formattedAmount = collection.amount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                        } else if (collection.currency === 'USD') {
+                            formattedAmount = collection.amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+                        } else if (collection.currency === 'EUR') {
+                            formattedAmount = collection.amount.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+                        }
+
+                        const row = `
+                            <tr>
+                                <td>${collection.date}</td>
+                                <td>${collection.description}</td>
+                                <td>${formattedAmount}</td>
+                                <td>${collection.currency}</td>
+                                <td>${collection.currency !== 'TRY' ? collection.exchangeRate.toFixed(4) : '-'}</td>
+                                <td>${collectionAmountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })}</td>
+                                <td>${collection.type}</td>
+                                <td class="actions-cell">
+                                    <button class="delete-btn" data-id="${doc.id}" data-type="collection">Sil</button>
+                                </td>
+                            </tr>
+                        `;
+                        collectionListBody.innerHTML += row;
+                    });
+                }
+                totalCollectionsTL.textContent = totalCollections.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+
+                // Kalan bakiyeyi hesapla ve göster
+                const projectDoc = await db.collection('projects').doc(projectId).get();
+                const contractAmountTL = projectDoc.data().contractAmountTL || 0;
+                const remainingBalance = contractAmountTL + totalCollections - totalExpenses;
+                remainingBalanceTL.textContent = remainingBalance.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                remainingBalanceTL.classList.remove('positive', 'negative');
+                if (remainingBalance >= 0) {
+                    remainingBalanceTL.classList.add('positive');
+                } else {
+                    remainingBalanceTL.classList.add('negative');
+                }
+                
+                // Chart'ı güncelle
+                updateBalanceChart(contractAmountTL, totalCollections, totalExpenses);
+
+            } catch (error) {
+                console.error("Finansal verileri yüklerken hata oluştu:", error);
+                showSystemMessage('Finansal veriler yüklenirken bir hata oluştu: ' + error.message, true);
+            }
+        }
+
+
+        // Proje Güncelleme Formu
         updateProjectForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-
             const newProjectName = updateProjectNameInput.value;
             const newCustomerName = updateCustomerNameInput.value;
             const newStatus = updateStatusSelect.value;
-            const newContractAmountTL = parseFloat(updateContractAmountTLInput.value);
+            const newContractAmount = parseFloat(updateContractAmountInput.value);
+            const newContractCurrency = updateContractCurrencySelect.value;
+            const newContractExchangeRate = parseFloat(updateContractExchangeRateInput.value) || 1;
+
+            if (isNaN(newContractAmount)) {
+                showSystemMessage('Lütfen geçerli bir sözleşme bedeli girin.', true);
+                return;
+            }
+
+            // Sözleşme bedelinin TL karşılığını hesapla
+            const newContractAmountTL = newContractCurrency === 'TRY' ? newContractAmount : newContractAmount * newContractExchangeRate;
 
             try {
                 await db.collection('projects').doc(currentProjectId).update({
                     projectName: newProjectName,
                     customerName: newCustomerName,
                     status: newStatus,
-                    contractAmountTL: newContractAmountTL
+                    contractAmount: newContractAmount,
+                    contractCurrency: newContractCurrency,
+                    contractExchangeRate: newContractExchangeRate,
+                    contractAmountTL: newContractAmountTL,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
                 });
-                showSystemMessage('Proje bilgileri başarıyla güncellendi!');
-                loadProjectDetails(currentProjectId); // Güncel bilgileri tekrar yükle
-                loadFinancialData(currentProjectId); // Özet tablosu için finansal verileri tekrar yükle
-            } catch (error) {
-                console.error('Proje güncellenirken hata oluştu:', error);
-                showSystemMessage('Proje güncellenirken bir hata oluştu: ' + error.message, true);
-            }
-        });
-
-        // Tab butonlarına tıklama olayları
-        tabButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                const targetTab = button.dataset.tab;
-
-                tabButtons.forEach(btn => btn.classList.remove('active'));
-                tabContents.forEach(content => content.classList.remove('active'));
-
-                button.classList.add('active');
-                document.getElementById(targetTab).classList.add('active');
-
-                // Özet sekmesi açıldığında grafiği güncelle
-                if (targetTab === 'summary') {
-                    loadFinancialData(currentProjectId);
-                }
-            });
-        });
-
-        // Harcama ekleme
-        addExpenseForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const description = document.getElementById('expenseDescription').value;
-            const amount = parseFloat(document.getElementById('expenseAmount').value);
-            const currency = document.getElementById('expenseCurrency').value;
-            const exchangeRate = parseFloat(document.getElementById('exchangeRate').value); 
-            const date = document.getElementById('expenseDate').value;
-
-            if (!description || isNaN(amount) || amount <= 0 || !currency || isNaN(exchangeRate) || exchangeRate <= 0 || !date) {
-                showSystemMessage('Lütfen geçerli harcama bilgilerini girin.', true);
-                return;
-            }
-
-            try {
-                const amountTL = amount * exchangeRate;
-                await db.collection('projects').doc(currentProjectId).collection('expenses').add({
-                    description: description,
-                    amount: amount,
-                    currency: currency,
-                    exchangeRate: exchangeRate,
-                    amountTL: amountTL,
-                    date: firebase.firestore.Timestamp.fromDate(new Date(date)),
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                showSystemMessage('Harcama başarıyla eklendi!');
-                addExpenseForm.reset();
-                // Tarih ve para birimini varsayılana ayarla
-                const today = new Date();
-                const year = today.getFullYear();
-                const month = String(today.getMonth() + 1).padStart(2, '0');
-                const day = String(today.getDate()).padStart(2, '0');
-                document.getElementById('expenseDate').value = `${year}-${month}-${day}`;
-                document.getElementById('expenseCurrency').value = 'TRY';
-                document.getElementById('exchangeRate').value = '1';
-                expenseExchangeRateGroup.style.display = 'none'; // TRY seçildiğinde kur alanını gizle
+                showSystemMessage('Proje bilgileri başarıyla güncellendi.', false);
+                // Güncel bilgileri tekrar yükle
+                loadProjectDetails(currentProjectId);
                 loadFinancialData(currentProjectId);
             } catch (error) {
-                console.error('Harcama eklerken hata:', error);
-                showSystemMessage('Harcama eklenirken bir hata oluştu: ' + error.message, true);
-            }
-        });
-
-        // Harcama Para birimi değişince kuru otomatik 1 yap veya çek
-        expenseCurrencySelect.addEventListener('change', async () => {
-            const selectedCurrency = expenseCurrencySelect.value;
-            const expenseDate = expenseDateInput.value; // Harcama tarihi
-
-            console.log('Harcama Para Birimi Değişti:', selectedCurrency);
-
-            if (selectedCurrency === 'TRY') {
-                expenseExchangeRateInput.value = '1';
-                expenseExchangeRateInput.readOnly = true;
-                expenseExchangeRateGroup.style.display = 'none'; // Kur alanını gizle
-                console.log('Harcama Kur (TRY): Value=1, ReadOnly=true, Group Hidden');
-            } else {
-                expenseExchangeRateGroup.style.display = 'block'; // Kur alanını göster
-                expenseExchangeRateInput.readOnly = true; // Otomatik doldurulacağı için readonly yap
-
-                if (expenseDate) {
-                    const rates = await fetchTCMBRates(expenseDate);
-                    if (rates && rates[selectedCurrency]) {
-                        expenseExchangeRateInput.value = rates[selectedCurrency].toFixed(4);
-                        console.log(`Harcama Kur (${selectedCurrency}): ${rates[selectedCurrency]}`);
-                    } else {
-                        expenseExchangeRateInput.value = ''; // Kur bulunamazsa boş bırak
-                        showSystemMessage(`Seçilen tarih için ${selectedCurrency} kuru bulunamadı. Lütfen manuel giriniz.`, true);
-                        expenseExchangeRateInput.readOnly = false; // Manuel girişe izin ver
-                        console.log(`Harcama Kur (${selectedCurrency}): Kur bulunamadı, ReadOnly=false`);
-                    }
-                } else {
-                    expenseExchangeRateInput.value = ''; // Tarih yoksa boş bırak
-                    showSystemMessage('Lütfen kur çekmek için bir tarih seçiniz.', true);
-                    expenseExchangeRateInput.readOnly = false; // Manuel girişe izin ver
-                    console.log('Harcama Kur: Tarih seçilmedi, ReadOnly=false');
-                }
-            }
-        });
-
-        // Harcama Tarihi değiştiğinde kur çek
-        expenseDateInput.addEventListener('change', async () => {
-            const selectedCurrency = expenseCurrencySelect.value;
-            const expenseDate = expenseDateInput.value;
-
-            if (selectedCurrency !== 'TRY') {
-                if (expenseDate) {
-                    const rates = await fetchTCMBRates(expenseDate);
-                    if (rates && rates[selectedCurrency]) {
-                        expenseExchangeRateInput.value = rates[selectedCurrency].toFixed(4);
-                        expenseExchangeRateInput.readOnly = true;
-                        console.log(`Harcama Kur Tarih Değişikliği (${selectedCurrency}): ${rates[selectedCurrency]}`);
-                    } else {
-                        expenseExchangeRateInput.value = '';
-                        showSystemMessage(`Seçilen tarih için ${selectedCurrency} kuru bulunamadı. Lütfen manuel giriniz.`, true);
-                        expenseExchangeRateInput.readOnly = false;
-                        console.log(`Harcama Kur Tarih Değişikliği (${selectedCurrency}): Kur bulunamadı, ReadOnly=false`);
-                    }
-                } else {
-                    expenseExchangeRateInput.value = '';
-                    showSystemMessage('Lütfen kur çekmek için bir tarih seçiniz.', true);
-                    expenseExchangeRateInput.readOnly = false;
-                    console.log('Harcama Kur Tarih Değişikliği: Tarih seçilmedi, ReadOnly=false');
-                }
+                console.error("Proje güncellenirken hata oluştu:", error);
+                showSystemMessage("Proje güncellenirken hata oluştu: " + error.message, true);
             }
         });
 
 
-        // Tahsilat ekleme
-        addCollectionForm.addEventListener('submit', async (e) => {
+        // Harcama Ekleme Formu
+        addExpenseForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const description = document.getElementById('expenseDescription').value;
+            const amount = parseFloat(document.getElementById('expenseAmount').value);
+            const currency = expenseCurrencySelect.value;
+            const exchangeRate = parseFloat(expenseExchangeRateInput.value) || 1;
+            const date = document.getElementById('expenseDate').value;
 
-            const description = document.getElementById('collectionDescription').value;
-            const amount = parseFloat(document.getElementById('collectionAmount').value);
-            const currency = document.getElementById('collectionCurrency').value;
-            const exchangeRate = parseFloat(document.getElementById('collectionExchangeRate').value);
-            const date = document.getElementById('collectionDate').value;
-            const collectionType = document.getElementById('collectionType').value;
-
-            if (!description || isNaN(amount) || amount <= 0 || !currency || isNaN(exchangeRate) || exchangeRate <= 0 || !date || !collectionType) {
-                showSystemMessage('Lütfen geçerli tahsilat bilgilerini ve tipini girin.', true);
+            if (isNaN(amount) || amount <= 0) {
+                showSystemMessage('Lütfen geçerli bir miktar girin.', true);
                 return;
             }
 
-            let checkNumber = '';
-            let checkMaturityDate = '';
-            let barterDescription = '';
-            let amountTL = amount; // Varsayılan olarak miktarın TL karşılığı
-
-            if (collectionType === 'Çek' || collectionType === 'Senet') {
-                checkNumber = document.getElementById('checkNumber').value;
-                checkMaturityDate = document.getElementById('checkMaturityDate').value;
-                if (!checkNumber || !checkMaturityDate) {
-                    showSystemMessage('Çek/Senet numarası ve vade tarihi zorunludur.', true);
-                    return;
-                }
-            } else if (collectionType === 'Barter') {
-                barterDescription = document.getElementById('barterDescription').value;
-                if (!barterDescription) {
-                    showSystemMessage('Barter açıklaması zorunludur.', true);
-                    return;
-                }
-                amountTL = amount; // Barter durumunda girilen miktar doğrudan TL karşılığıdır
-            } else {
-                amountTL = amount * exchangeRate; // Diğer durumlarda kur ile çarp
-            }
-
-
             try {
-                await db.collection('projects').doc(currentProjectId).collection('collections').add({
-                    description: description,
-                    amount: amount,
-                    currency: currency,
-                    exchangeRate: exchangeRate,
-                    amountTL: amountTL, // Hesaplanan TL karşılığı
-                    date: firebase.firestore.Timestamp.fromDate(new Date(date)),
-                    collectionType: collectionType,
-                    checkNumber: checkNumber,
-                    checkMaturityDate: checkMaturityDate,
-                    barterDescription: barterDescription,
+                await db.collection('expenses').add({
+                    projectId: currentProjectId,
+                    description,
+                    amount,
+                    currency,
+                    exchangeRate,
+                    date,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
-                showSystemMessage('Tahsilat başarıyla eklendi!');
-                addCollectionForm.reset();
-                // Tarih ve para birimini varsayılana ayarla
+                showSystemMessage('Harcama başarıyla eklendi.', false);
+                addExpenseForm.reset();
+                // Tarih inputunu sıfırlarken bugünün tarihini yeniden ata
                 const today = new Date();
                 const year = today.getFullYear();
                 const month = String(today.getMonth() + 1).padStart(2, '0');
                 const day = String(today.getDate()).padStart(2, '0');
-                document.getElementById('collectionDate').value = `${year}-${month}-${day}`;
-                document.getElementById('collectionCurrency').value = 'TRY';
-                document.getElementById('collectionExchangeRate').value = '1';
-                collectionExchangeRateGroup.style.display = 'none'; // TRY seçildiğinde kur alanını gizle
-                collectionTypeSelect.value = ''; // Tahsilat tipini sıfırla
+                const todayFormatted = `${year}-${month}-${day}`;
+                expenseDateInput.value = todayFormatted;
+
+                // Harcama kur seçicisini sıfırla
+                expenseCurrencySelect.value = 'TRY';
+                expenseExchangeRateGroup.style.display = 'none';
+
+                loadFinancialData(currentProjectId);
+            } catch (error) {
+                console.error("Harcama eklenirken hata oluştu:", error);
+                showSystemMessage("Harcama eklenirken hata oluştu: " + error.message, true);
+            }
+        });
+
+
+        // Tahsilat Ekleme Formu
+        addCollectionForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const description = document.getElementById('collectionDescription').value;
+            const amount = parseFloat(document.getElementById('collectionAmount').value);
+            const currency = collectionCurrencySelect.value;
+            const exchangeRate = parseFloat(collectionExchangeRateInput.value) || 1;
+            const date = document.getElementById('collectionDate').value;
+            const type = collectionTypeSelect.value;
+            const checkNumber = document.getElementById('checkNumber').value;
+            const checkMaturityDate = document.getElementById('checkMaturityDate').value;
+            const barterDescription = document.getElementById('barterDescription').value;
+
+            if (isNaN(amount) || amount <= 0) {
+                showSystemMessage('Lütfen geçerli bir miktar girin.', true);
+                return;
+            }
+
+            const collectionData = {
+                projectId: currentProjectId,
+                description,
+                amount,
+                currency,
+                exchangeRate,
+                date,
+                type,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            if (type === 'Çek' || type === 'Senet') {
+                collectionData.checkNumber = checkNumber;
+                collectionData.checkMaturityDate = checkMaturityDate;
+            } else if (type === 'Barter') {
+                collectionData.barterDescription = barterDescription;
+            }
+
+            try {
+                await db.collection('collections').add(collectionData);
+                showSystemMessage('Tahsilat başarıyla eklendi.', false);
+                addCollectionForm.reset();
+                // Tarih inputunu sıfırlarken bugünün tarihini yeniden ata
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = String(today.getMonth() + 1).padStart(2, '0');
+                const day = String(today.getDate()).padStart(2, '0');
+                const todayFormatted = `${year}-${month}-${day}`;
+                collectionDateInput.value = todayFormatted;
+
+                // Tahsilat kur seçicisini sıfırla
+                collectionCurrencySelect.value = 'TRY';
+                collectionExchangeRateGroup.style.display = 'none';
                 checkDetailsDiv.style.display = 'none';
                 barterDetailsDiv.style.display = 'none';
 
                 loadFinancialData(currentProjectId);
-
             } catch (error) {
-                console.error('Tahsilat eklerken hata:', error);
-                showSystemMessage('Tahsilat eklenirken bir hata oluştu: ' + error.message, true);
+                console.error("Tahsilat eklenirken hata oluştu:", error);
+                showSystemMessage("Tahsilat eklenirken hata oluştu: " + error.message, true);
             }
         });
 
-        // Tahsilat Para birimi değişince kuru otomatik 1 yap veya çek
-        collectionCurrencySelect.addEventListener('change', async () => {
-            const selectedCurrency = collectionCurrencySelect.value;
-            const collectionDate = collectionDateInput.value; // Tahsilat tarihi
-            const selectedType = collectionTypeSelect.value;
+        // Delete butonu işlevi
+        document.addEventListener('click', async (e) => {
+            if (e.target.classList.contains('delete-btn')) {
+                const docId = e.target.getAttribute('data-id');
+                const docType = e.target.getAttribute('data-type');
+                if (confirm(`Bu ${docType} kaydını silmek istediğinizden emin misiniz?`)) {
+                    try {
+                        await db.collection(docType + 's').doc(docId).delete();
+                        showSystemMessage(`${docType} kaydı başarıyla silindi.`, false);
+                        loadFinancialData(currentProjectId); // Listeyi tekrar yükle
+                    } catch (error) {
+                        console.error(`Silme işlemi sırasında hata oluştu:`, error);
+                        showSystemMessage(`Silme işlemi sırasında hata oluştu: ${error.message}`, true);
+                    }
+                }
+            }
+        });
 
-            console.log('Tahsilat Para Birimi Değişti:', selectedCurrency);
 
-            if (selectedCurrency === 'TRY' || selectedType === 'Barter') { // Barter seçiliyse de kur gizlenmeli
-                collectionExchangeRateInput.value = '1';
-                collectionExchangeRateInput.readOnly = true;
-                collectionExchangeRateGroup.style.display = 'none'; // Kur alanını gizle
-                console.log('Tahsilat Kur (TRY/Barter): Value=1, ReadOnly=true, Group Hidden');
+        // Tab butonları işlevi
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const tab = button.getAttribute('data-tab');
+                // Aktif butonu ve içeriği kaldır
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                tabContents.forEach(content => content.classList.remove('active'));
+                // Yeni aktif butonu ve içeriği göster
+                button.classList.add('active');
+                document.getElementById(tab).classList.add('active');
+            });
+        });
+
+        // Kur bilgisi için para birimi seçicilerinin değişimini izleme
+        async function handleCurrencyChange(selectElement, exchangeRateGroup, exchangeRateInput) {
+            const currency = selectElement.value;
+            const today = new Date().toISOString().slice(0, 10);
+            if (currency === 'TRY') {
+                exchangeRateGroup.style.display = 'none';
+                exchangeRateInput.value = 1;
             } else {
-                collectionExchangeRateGroup.style.display = 'block'; // Kur alanını göster
-                collectionExchangeRateInput.readOnly = true; // Otomatik doldurulacağı için readonly yap
-
-                if (collectionDate) {
-                    const rates = await fetchTCMBRates(collectionDate);
-                    if (rates && rates[selectedCurrency]) {
-                        collectionExchangeRateInput.value = rates[selectedCurrency].toFixed(4);
-                        console.log(`Tahsilat Kur (${selectedCurrency}): ${rates[selectedCurrency]}`);
-                    } else {
-                        collectionExchangeRateInput.value = ''; // Kur bulunamazsa boş bırak
-                        showSystemMessage(`Seçilen tarih için ${selectedCurrency} kuru bulunamadı. Lütfen manuel giriniz.`, true);
-                        collectionExchangeRateInput.readOnly = false; // Manuel girişe izin ver
-                        console.log(`Tahsilat Kur (${selectedCurrency}): Kur bulunamadı, ReadOnly=false`);
-                    }
+                exchangeRateGroup.style.display = 'flex';
+                // Kur bilgisini çek
+                const rates = await fetchTCMBRates(today);
+                if (rates && rates[currency]) {
+                    exchangeRateInput.value = rates[currency].toFixed(4);
                 } else {
-                    collectionExchangeRateInput.value = ''; // Tarih yoksa boş bırak
-                    showSystemMessage('Lütfen kur çekmek için bir tarih seçiniz.', true);
-                    collectionExchangeRateInput.readOnly = false; // Manuel girişe izin ver
-                    console.log('Tahsilat Kur: Tarih seçilmedi, ReadOnly=false');
+                    exchangeRateInput.value = 1;
                 }
             }
-        });
+        }
 
-        // Tahsilat Tarihi değiştiğinde kur çek
-        collectionDateInput.addEventListener('change', async () => {
-            const selectedCurrency = collectionCurrencySelect.value;
-            const collectionDate = collectionDateInput.value;
-            const selectedType = collectionTypeSelect.value;
+        expenseCurrencySelect.addEventListener('change', () => handleCurrencyChange(expenseCurrencySelect, expenseExchangeRateGroup, expenseExchangeRateInput));
+        collectionCurrencySelect.addEventListener('change', () => handleCurrencyChange(collectionCurrencySelect, collectionExchangeRateGroup, collectionExchangeRateInput));
+        updateContractCurrencySelect.addEventListener('change', () => handleCurrencyChange(updateContractCurrencySelect, updateContractExchangeRateGroup, updateContractExchangeRateInput));
 
-            if (selectedCurrency !== 'TRY' && selectedType !== 'Barter') { // TRY veya Barter değilse
-                if (collectionDate) {
-                    const rates = await fetchTCMBRates(collectionDate);
-                    if (rates && rates[selectedCurrency]) {
-                        collectionExchangeRateInput.value = rates[selectedCurrency].toFixed(4);
-                        collectionExchangeRateInput.readOnly = true;
-                        console.log(`Tahsilat Kur Tarih Değişikliği (${selectedCurrency}): ${rates[selectedCurrency]}`);
-                    } else {
-                        collectionExchangeRateInput.value = '';
-                        showSystemMessage(`Seçilen tarih için ${selectedCurrency} kuru bulunamadı. Lütfen manuel giriniz.`, true);
-                        collectionExchangeRateInput.readOnly = false;
-                        console.log(`Tahsilat Kur Tarih Değişikliği (${selectedCurrency}): Kur bulunamadı, ReadOnly=false`);
-                    }
-                } else {
-                    collectionExchangeRateInput.value = '';
-                    showSystemMessage('Lütfen kur çekmek için bir tarih seçiniz.', true);
-                    collectionExchangeRateInput.readOnly = false;
-                    console.log('Tahsilat Kur Tarih Değişikliği: Tarih seçilmedi, ReadOnly=false');
-                }
-            }
-        });
 
-        // Tahsilat Tipi Değişikliklerini Dinleme
-        collectionTypeSelect.addEventListener('change', () => {
-            const selectedType = collectionTypeSelect.value;
+        // Çek/Senet veya Barter seçildiğinde ek alanları gösterme
+        collectionTypeSelect.addEventListener('change', (e) => {
             checkDetailsDiv.style.display = 'none';
             barterDetailsDiv.style.display = 'none';
-            
-            // Eğer para birimi TRY değilse veya barter seçilmediyse kur alanını göster.
-            // Aksi takdirde gizle ve 1 olarak ayarla.
-            if (collectionCurrencySelect.value !== 'TRY' && selectedType !== 'Barter') {
-                collectionExchangeRateGroup.style.display = 'block';
-                // Kur bilgisini tekrar yükle (eğer tarih ve para birimi seçili ise)
-                collectionCurrencySelect.dispatchEvent(new Event('change')); 
-            } else {
-                collectionExchangeRateGroup.style.display = 'none';
-                collectionExchangeRateInput.value = '1';
-                collectionExchangeRateInput.readOnly = true;
-            }
-
-
-            if (selectedType === 'Çek' || selectedType === 'Senet') {
-                checkDetailsDiv.style.display = 'block';
-                // Para birimi TRY değilse kur alanını göster ve güncelle
-                if (collectionCurrencySelect.value !== 'TRY') {
-                    collectionExchangeRateGroup.style.display = 'block';
-                    collectionCurrencySelect.dispatchEvent(new Event('change')); // Kur bilgisini tekrar yükle
-                }
-            } else if (selectedType === 'Barter') {
-                barterDetailsDiv.style.display = 'block';
-                // Barter seçilince kur alanı her zaman gizli kalır, miktar alanı TL olarak kullanılır
-                collectionCurrencySelect.value = 'TRY'; // Para birimini otomatik TRY yap
-                collectionExchangeRateInput.value = '1';
-                collectionExchangeRateGroup.style.display = 'none';
-            } else { // Nakit, Banka Havalesi vb.
-                // Para birimi TRY değilse kur alanını göster ve güncelle
-                if (collectionCurrencySelect.value !== 'TRY') {
-                    collectionExchangeRateGroup.style.display = 'block';
-                    collectionCurrencySelect.dispatchEvent(new Event('change')); // Kur bilgisini tekrar yükle
-                }
+            if (e.target.value === 'Çek' || e.target.value === 'Senet') {
+                checkDetailsDiv.style.display = 'flex';
+            } else if (e.target.value === 'Barter') {
+                barterDetailsDiv.style.display = 'flex';
             }
         });
 
-        // Harcama veya Tahsilat silme fonksiyonu
-        async function deleteFinancialItem(collectionName, docId, description) {
-            if (confirm(`"${description}" kaydını silmek istediğinizden emin misiniz?`)) {
-                try {
-                    await db.collection('projects').doc(currentProjectId).collection(collectionName).doc(docId).delete();
-                    showSystemMessage('Kayıt başarıyla silindi!');
-                    loadFinancialData(currentProjectId); // Listeyi ve özetleri güncelle
-                } catch (error) {
-                    console.error('Kayıt silinirken hata:', error);
-                    showSystemMessage('Kayıt silinirken bir hata oluştu: ' + error.message, true);
-                }
-            }
-        }
-
-        // Finansal Verileri Yükle (Harcamalar, Tahsilatlar, Özet)
-        async function loadFinancialData(projectId) {
-            try {
-                // Harcamaları getir
-                const expensesSnapshot = await db.collection('projects').doc(projectId).collection('expenses').orderBy('date', 'desc').get();
-                expenseListBody.innerHTML = ''; // Listeyi temizle
-                let totalExpenses = 0;
-                if (expensesSnapshot.empty) {
-                    expenseListBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Henüz harcama eklenmedi.</td></tr>';
-                } else {
-                    expensesSnapshot.forEach(doc => {
-                        const expense = doc.data();
-                        const row = expenseListBody.insertRow();
-                        
-                        let formattedDate = 'N/A';
-                        if (expense.date) {
-                            if (typeof expense.date.toDate === 'function') { // Firebase Timestamp ise
-                                formattedDate = new Date(expense.date.toDate()).toLocaleDateString('tr-TR');
-                            } else if (typeof expense.date === 'string') { // String ise (eski kayıtlar için)
-                                formattedDate = new Date(expense.date).toLocaleDateString('tr-TR');
-                            }
-                        }
-                        row.insertCell(0).textContent = formattedDate;
-
-                        row.insertCell(1).textContent = expense.description;
-                        row.insertCell(2).textContent = expense.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        row.insertCell(3).textContent = expense.currency;
-                        row.insertCell(4).textContent = expense.exchangeRate ? expense.exchangeRate.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) : '-';
-                        row.insertCell(5).textContent = expense.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                        
-                        const actionsCell = row.insertCell(6);
-                        actionsCell.classList.add('actions-cell');
-                        const deleteBtn = document.createElement('button');
-                        deleteBtn.textContent = 'Sil';
-                        deleteBtn.classList.add('delete-btn');
-                        deleteBtn.addEventListener('click', () => deleteFinancialItem('expenses', doc.id, expense.description));
-                        actionsCell.appendChild(deleteBtn);
-
-                        totalExpenses += expense.amountTL;
-                    });
-                }
-
-                // Tahsilatları getir
-                const collectionsSnapshot = await db.collection('projects').doc(projectId).collection('collections').orderBy('date', 'desc').get();
-                collectionListBody.innerHTML = ''; // Listeyi temizle
-                let totalCollections = 0;
-                if (collectionsSnapshot.empty) {
-                    collectionListBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Henüz tahsilat eklenmedi.</td></tr>';
-                } else {
-                    collectionsSnapshot.forEach(doc => {
-                        const collection = doc.data();
-                        const row = collectionListBody.insertRow();
-                        
-                        let formattedDate = 'N/A';
-                        if (collection.date) {
-                            if (typeof collection.date.toDate === 'function') { // Firebase Timestamp ise
-                                formattedDate = new Date(collection.date.toDate()).toLocaleDateString('tr-TR');
-                            } else if (typeof collection.date === 'string') { // String ise (eski kayıtlar için)
-                                formattedDate = new Date(collection.date).toLocaleDateString('tr-TR');
-                            }
-                        }
-                        row.insertCell(0).textContent = formattedDate;
-
-                        row.insertCell(1).textContent = collection.description;
-                        row.insertCell(2).textContent = collection.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        row.insertCell(3).textContent = collection.currency;
-                        row.insertCell(4).textContent = collection.exchangeRate ? collection.exchangeRate.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) : '-';
-                        row.insertCell(5).textContent = collection.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                        row.insertCell(6).textContent = collection.collectionType || 'Belirtilmemiş';
-                        
-                        const actionsCell = row.insertCell(7);
-                        actionsCell.classList.add('actions-cell');
-                        const deleteBtn = document.createElement('button');
-                        deleteBtn.textContent = 'Sil';
-                        deleteBtn.classList.add('delete-btn');
-                        deleteBtn.addEventListener('click', () => deleteFinancialItem('collections', doc.id, collection.description));
-                        actionsCell.appendChild(deleteBtn);
-
-                        totalCollections += collection.amountTL;
-                    });
-                }
-
-                // Özet verilerini güncelle
-                totalExpensesTL.textContent = totalExpenses.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                totalCollectionsTL.textContent = totalCollections.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                const remainingBalance = totalCollections - totalExpenses;
-                remainingBalanceTL.textContent = remainingBalance.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                remainingBalanceTL.classList.remove('positive', 'negative'); // Önceki sınıfları kaldır
-                remainingBalanceTL.classList.add(remainingBalance >= 0 ? 'positive' : 'negative');
-
-                // Grafiği güncelle
-                updateBalanceChart(totalCollections, totalExpenses);
-
-            } catch (error) {
-                console.error('Finansal veriler yüklenirken hata oluştu:', error);
-                showSystemMessage('Finansal veriler yüklenirken bir hata oluştu: ' + error.message, true);
-            }
-        }
-
-        // Chart.js ile bakiye grafiğini güncelle
-        function updateBalanceChart(collections, expenses) {
+        // Chart'ı oluşturma/güncelleme fonksiyonu
+        function updateBalanceChart(contractAmountTL, totalCollectionsTL, totalExpensesTL) {
             const ctx = document.getElementById('balanceChart').getContext('2d');
-            
-            // Eğer daha önce bir grafik varsa yok et
+
             if (balanceChart) {
-                balanceChart.destroy();
+                balanceChart.destroy(); // Önceki grafiği yok et
             }
 
             balanceChart = new Chart(ctx, {
-                type: 'bar',
+                type: 'doughnut',
                 data: {
-                    labels: ['Toplam Tahsilat', 'Toplam Harcama', 'Kalan Bakiye'],
+                    labels: ['Sözleşme Bedeli (TL)', 'Toplam Harcamalar (TL)', 'Toplam Tahsilatlar (TL)'],
                     datasets: [{
-                        label: 'Tutar (TL)',
-                        data: [collections, expenses, collections - expenses],
+                        label: 'Finansal Durum',
+                        data: [contractAmountTL, totalExpensesTL, totalCollectionsTL],
                         backgroundColor: [
-                            'rgba(40, 167, 69, 0.7)', // Yeşil - Tahsilat
-                            'rgba(220, 53, 69, 0.7)',  // Kırmızı - Harcama
-                            (collections - expenses >= 0) ? 'rgba(0, 123, 255, 0.7)' : 'rgba(255, 193, 7, 0.7)' // Mavi/Sarı - Bakiye
+                            '#007bff', // Mavi
+                            '#dc3545', // Kırmızı
+                            '#28a745'  // Yeşil
                         ],
-                        borderColor: [
-                            'rgba(40, 167, 69, 1)',
-                            'rgba(220, 53, 69, 1)',
-                            (collections - expenses >= 0) ? 'rgba(0, 123, 255, 1)' : 'rgba(255, 193, 7, 1)'
-                        ],
-                        borderWidth: 1
+                        hoverOffset: 4
                     }]
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            display: false,
-                        },
-                        title: {
-                            display: true,
-                            text: 'Proje Finansal Durumu',
-                            font: {
-                                size: 16
-                            }
+                            position: 'top',
                         },
                         tooltip: {
                             callbacks: {
-                                label: function(context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) {
-                                        label += ': ';
-                                    }
-                                    if (context.parsed.y !== null) {
-                                        label += context.parsed.y.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 2 });
-                                    }
-                                    return label;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                callback: function(value, index, values) {
-                                    return value.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 });
+                                label: function(tooltipItem) {
+                                    return tooltipItem.label + ': ' + tooltipItem.raw.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                                 }
                             }
                         }
@@ -1309,31 +1187,6 @@
                 }
             });
         }
-        
-        // Form yüklendiğinde bugünün tarihini ve TL varsayılanını ayarla
-        document.addEventListener('DOMContentLoaded', () => {
-            const today = new Date();
-            const year = today.getFullYear();
-            const month = String(today.getMonth() + 1).padStart(2, '0');
-            const day = String(today.getDate()).padStart(2, '0');
-            const formattedDate = `${year}-${month}-${day}`;
-
-            document.getElementById('expenseDate').value = formattedDate;
-            document.getElementById('collectionDate').value = formattedDate;
-
-            // Kur alanlarını varsayılan olarak readonly ve 1 TL yap
-            // Varsayılan olarak TL seçili olduğu için kur alanları gizli olmalı
-            if (expenseExchangeRateGroup) {
-                expenseExchangeRateGroup.style.display = 'none';
-            }
-            if (collectionExchangeRateGroup) {
-                collectionExchangeRateGroup.style.display = 'none';
-            }
-            // Başlangıçta tahsilat tipi seçili olmadığı için ilgili div'leri gizle
-            checkDetailsDiv.style.display = 'none';
-            barterDetailsDiv.style.display = 'none';
-        });
-
     </script>
 </body>
 </html>
