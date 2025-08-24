@@ -121,6 +121,8 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
 
+        const EXCHANGE_RATE_FUNCTION_URL = 'https://us-central1-projetakip-e3a75.cloudfunctions.net/getExchangeRate';
+
         const userEmailSpan = document.getElementById('userEmail');
         const logoutButton = document.getElementById('logoutButton');
         const systemMessageDiv = document.getElementById('systemMessage');
@@ -134,44 +136,51 @@
 
         let currentUserId = null;
 
-        // TCMB'den kur çekme fonksiyonu (Cloud Function)
-        const EXCHANGE_RATE_FUNCTION_URL = 'https://us-central1-projetakip-e3a75.cloudfunctions.net/getExchangeRate';
-
+        // TCMB'den kur çekme fonksiyonu
         async function fetchTCMBRates(dateString) {
             try {
                 const cloudFnResponse = await fetch(`${EXCHANGE_RATE_FUNCTION_URL}?date=${dateString}`);
                 if (!cloudFnResponse.ok) {
-                    throw new Error(`Cloud Function'dan kur bilgisi alınamadı. Durum: ${cloudFnResponse.status}`);
+                    throw new Error(`Kur bilgisi alınamadı. HTTP ${cloudFnResponse.status}`);
                 }
                 const data = await cloudFnResponse.json();
-                return data.rates;
+                return data.rates || null;
             } catch (error) {
-                console.error('Döviz kur çekme hatası:', error);
+                console.error('Kur çekme hatası:', error);
                 return null;
             }
         }
 
         // TL karşılığını hesapla
-        async function calculateContractAmountTL(project) {
-            if (project.contractCurrency === 'TRY') {
-                return project.contractAmount || 0;
+        async function getContractAmountDisplay(contractAmount, contractCurrency, contractDate) {
+            if (contractCurrency === 'TRY') {
+                return {
+                    original: `${contractAmount.toLocaleString('tr-TR')} ₺`,
+                    tl: contractAmount
+                };
             }
-            if (!project.contractDate) {
-                return project.contractAmount || 0;
-            }
-            const rates = await fetchTCMBRates(project.contractDate.toDate().toISOString().split('T')[0]);
-            if (rates && rates[project.contractCurrency]) {
-                return (project.contractAmount * rates[project.contractCurrency]).toFixed(2);
-            }
-            return project.contractAmount || 0;
-        }
 
-        // Formatlı para gösterimi
-        function formatCurrency(amount, currency) {
-            if (currency === 'TRY') {
-                return amount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+            if (!contractDate) {
+                return {
+                    original: `${contractAmount.toLocaleString('tr-TR')} ${contractCurrency}`,
+                    tl: 0
+                };
+            }
+
+            const dateStr = contractDate.toDate().toISOString().split('T')[0];
+            const rates = await fetchTCMBRates(dateStr);
+
+            if (rates && typeof rates[contractCurrency] !== 'undefined' && rates[contractCurrency] !== null) {
+                const tlValue = contractAmount * rates[contractCurrency];
+                return {
+                    original: `${contractAmount.toLocaleString('tr-TR')} ${contractCurrency}`,
+                    tl: tlValue
+                };
             } else {
-                return `${amount.toFixed(2)} ${currency}`;
+                return {
+                    original: `${contractAmount.toLocaleString('tr-TR')} ${contractCurrency}`,
+                    tl: 0
+                };
             }
         }
 
@@ -231,9 +240,7 @@
                     status: 'Başlamadı',
                     contractAmount: 0,
                     contractCurrency: 'TRY',
-                    contractExchangeRate: 1,
                     contractDate: firebase.firestore.Timestamp.now(),
-                    contractAmountTL: 0,
                     ownerId: currentUserId,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
@@ -251,18 +258,13 @@
         async function loadProjects() {
             projectListBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Projeler yükleniyor...</td></tr>';
 
-            let query = db.collection('projects');
-            query = query.where('ownerId', '==', currentUserId);
+            let query = db.collection('projects').where('ownerId', '==', currentUserId);
 
             const selectedStatus = filterStatus.value;
-            if (selectedStatus) {
-                query = query.where('status', '==', selectedStatus);
-            }
+            if (selectedStatus) query = query.where('status', '==', selectedStatus);
 
             const selectedCategory = filterCategory.value;
-            if (selectedCategory) {
-                query = query.where('categories', 'array-contains', selectedCategory);
-            }
+            if (selectedCategory) query = query.where('categories', 'array-contains', selectedCategory);
 
             const sortOption = sortBy.value;
             switch (sortOption) {
@@ -276,10 +278,10 @@
                     query = query.orderBy('projectName', 'desc');
                     break;
                 case 'contractAmountTL_asc':
-                    query = query.orderBy('contractAmountTL', 'asc');
+                    query = query.orderBy('contractAmount', 'asc');
                     break;
                 case 'contractAmountTL_desc':
-                    query = query.orderBy('contractAmountTL', 'desc');
+                    query = query.orderBy('contractAmount', 'desc');
                     break;
                 case 'createdAt_desc':
                 default:
@@ -296,11 +298,12 @@
                     return;
                 }
 
-                snapshot.forEach(doc => {
+                snapshot.forEach(async (doc) => {
                     const project = doc.data();
                     const projectId = doc.id;
 
                     const row = projectListBody.insertRow();
+
                     row.insertCell(0).textContent = project.projectName;
                     row.insertCell(1).textContent = project.customerName;
                     row.insertCell(2).textContent = (project.categories && project.categories.length > 0) ? project.categories.join(', ') : 'Belirtilmemiş';
@@ -313,18 +316,22 @@
                     statusCell.appendChild(statusSpan);
 
                     const amountCell = row.insertCell(4);
-                    const originalAmountText = formatCurrency(project.contractAmount, project.contractCurrency);
-                    const tlAmount = parseFloat(project.contractAmountTL || 0);
-                    const tlText = tlAmount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
 
-                    // Orijinal miktar + TL karşılığı
+                    // Varsayılan değerler
+                    const contractAmount = project.contractAmount || 0;
+                    const contractCurrency = project.contractCurrency || 'TRY';
+                    const contractDate = project.contractDate;
+
+                    // TL karşılığını al
+                    const displayData = await getContractAmountDisplay(contractAmount, contractCurrency, contractDate);
+
+                    // Gösterim
+                    const originalText = displayData.original;
+                    const tlText = displayData.tl.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+
                     amountCell.innerHTML = `
-                        <div style="font-weight: 500; font-size: 0.9em;">
-                            ${originalAmountText}
-                        </div>
-                        <div style="color: #666; font-size: 0.8em;">
-                            (${tlText})
-                        </div>
+                        <div style="font-weight: 500; font-size: 0.95em;">${originalText}</div>
+                        <div style="color: #666; font-size: 0.8em;">(${tlText})</div>
                     `;
 
                     const actionsCell = row.insertCell(5);
@@ -344,39 +351,30 @@
                 });
             } catch (error) {
                 console.error('Projeler yüklenirken hata oluştu:', error);
-                projectListBody.innerHTML = '<tr><td colspan="6" style="color:red; text-align:center;">Projeler yüklenirken bir hata oluştu. Lütfen sayfayı yenileyin veya tekrar deneyin.</td></tr>';
+                projectListBody.innerHTML = '<tr><td colspan="6" style="color:red; text-align:center;">Projeler yüklenirken bir hata oluştu.</td></tr>';
                 showSystemMessage('Projeler yüklenirken bir hata oluştu: ' + error.message, true);
             }
         }
 
         async function deleteProject(projectId, projectName) {
-            if (confirm(`"${projectName}" projesini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz ve proje ile ilgili tüm harcama/tahsilat kayıtlarını da siler.`)) {
+            if (confirm(`"${projectName}" projesini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`)) {
                 try {
                     const projectRef = db.collection('projects').doc(projectId);
                     
-                    // Harcamaları sil
                     const expensesSnapshot = await projectRef.collection('expenses').get();
-                    const expenseDeletePromises = [];
-                    expensesSnapshot.forEach(doc => {
-                        expenseDeletePromises.push(doc.ref.delete());
-                    });
+                    const expenseDeletePromises = expensesSnapshot.docs.map(doc => doc.ref.delete());
                     await Promise.all(expenseDeletePromises);
 
-                    // Tahsilatları sil
                     const collectionsSnapshot = await projectRef.collection('collections').get();
-                    const collectionDeletePromises = [];
-                    collectionsSnapshot.forEach(doc => {
-                        collectionDeletePromises.push(doc.ref.delete());
-                    });
+                    const collectionDeletePromises = collectionsSnapshot.docs.map(doc => doc.ref.delete());
                     await Promise.all(collectionDeletePromises);
 
-                    // Proje sil
                     await projectRef.delete();
                     
-                    showSystemMessage('Proje ve ilgili tüm kayıtları başarıyla silindi!', false);
+                    showSystemMessage('Proje ve tüm kayıtları başarıyla silindi!', false);
                     loadProjects();
                 } catch (error) {
-                    console.error('Proje silinirken hata oluştu:', error);
+                    console.error('Proje silinirken hata:', error);
                     showSystemMessage('Proje silinirken bir hata oluştu: ' + error.message, true);
                 }
             }
