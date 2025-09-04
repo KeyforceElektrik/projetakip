@@ -49,18 +49,6 @@
                 <h4>Toplam Sözleşme Bedeli (TL)</h4>
                 <p id="totalContractAmountTL" class="summary-value"></p>
             </div>
-            <div class="summary-card">
-                <h4>Toplam Harcama (TL)</h4>
-                <p id="totalExpensesTL" class="summary-value"></p>
-            </div>
-            <div class="summary-card">
-                <h4>Toplam Tahsilat (TL)</h4>
-                <p id="totalCollectionsTL" class="summary-value"></p>
-            </div>
-            <div class="summary-card">
-                <h4>Genel Kalan Bakiye (TL)</h4>
-                <p id="overallBalanceTL" class="summary-value"></p>
-            </div>
         </div>
 
         <h2 class="section-title">Kategori Bazında Finansal Analiz</h2>
@@ -70,14 +58,13 @@
                     <tr>
                         <th>Kategori</th>
                         <th>Proje Sayısı</th>
+                        <th>Proje Oranı (%)</th>
                         <th>Toplam Sözleşme Bedeli (TL)</th>
-                        <th>Toplam Harcama (TL)</th>
-                        <th>Toplam Tahsilat (TL)</th>
                         <th>Ciro Oranı (%)</th>
                     </tr>
                 </thead>
                 <tbody id="categoryAnalysisTableBody">
-                    <tr><td colspan="6" style="text-align:center;">Rapor oluşturmak için tarihleri seçin.</td></tr>
+                    <tr><td colspan="5" style="text-align:center;">Rapor oluşturmak için tarihleri seçin.</td></tr>
                 </tbody>
             </table>
         </div>
@@ -170,9 +157,6 @@
 
         const totalProjectsSpan = document.getElementById('totalProjects');
         const totalContractAmountTLSpan = document.getElementById('totalContractAmountTL');
-        const totalExpensesTLSpan = document.getElementById('totalExpensesTL');
-        const totalCollectionsTLSpan = document.getElementById('totalCollectionsTL');
-        const overallBalanceTLSpan = document.getElementById('overallBalanceTL');
 
         const categoryAnalysisTableBody = document.getElementById('categoryAnalysisTableBody');
         const detailedFilterStatus = document.getElementById('detailedFilterStatus');
@@ -270,8 +254,7 @@
                 }
 
                 let totalContractAmount = 0;
-                let totalExpenses = 0;
-                let totalCollections = 0;
+                let totalProjectCount = 0;
                 const categoryData = {};
 
                 for (const doc of snapshot.docs) {
@@ -291,58 +274,26 @@
                         contractAmountTL = project.contractAmount * project.contractExchangeRate;
                     }
                     totalContractAmount += contractAmountTL;
-
-                    const expensesSnapshot = await db.collection('projects').doc(projectId).collection('expenses')
-                        .where('date', '>=', startDateInput.value || '1900-01-01')
-                        .where('date', '<=', endDateInput.value || '2100-12-31')
-                        .get();
-                    expensesSnapshot.forEach(expDoc => {
-                        const expense = expDoc.data();
-                        const amountTL = expense.amountTL || 0;
-                        totalExpenses += amountTL;
-
-                        project.categories.forEach(cat => {
-                            if (!categoryData[cat]) categoryData[cat] = { projectCount: 0, totalContractAmount: 0, totalExpenses: 0, totalCollections: 0 };
-                            categoryData[cat].totalExpenses += amountTL;
-                        });
-                    });
-
-                    const collectionsSnapshot = await db.collection('projects').doc(projectId).collection('collections')
-                        .where('date', '>=', startDateInput.value || '1900-01-01')
-                        .where('date', '<=', endDateInput.value || '2100-12-31')
-                        .get();
-                    collectionsSnapshot.forEach(collDoc => {
-                        const collection = collDoc.data();
-                        const amountTL = collection.amountTL || 0;
-                        totalCollections += amountTL;
-
-                        project.categories.forEach(cat => {
-                            if (!categoryData[cat]) categoryData[cat] = { projectCount: 0, totalContractAmount: 0, totalExpenses: 0, totalCollections: 0 };
-                            categoryData[cat].totalCollections += amountTL;
-                        });
-                    });
+                    totalProjectCount++;
 
                     project.categories.forEach(cat => {
-                        if (!categoryData[cat]) categoryData[cat] = { projectCount: 0, totalContractAmount: 0, totalExpenses: 0, totalCollections: 0 };
-                        const projectCreatedAt = project.createdAt ? project.createdAt.toDate() : new Date(0);
-                        if ((!startDate || projectCreatedAt >= startDate) && (!endDate || projectCreatedAt <= endDate)) {
-                            categoryData[cat].projectCount++;
+                        if (!categoryData[cat]) {
+                            categoryData[cat] = {
+                                projectCount: 0,
+                                totalContractAmount: 0
+                            };
                         }
+                        categoryData[cat].projectCount++;
                         categoryData[cat].totalContractAmount += contractAmountTL;
                     });
                 }
 
                 filteredProjects = tempFilteredProjects;
 
-                totalProjectsSpan.textContent = filteredProjects.length;
+                totalProjectsSpan.textContent = totalProjectCount;
                 totalContractAmountTLSpan.textContent = totalContractAmount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                totalExpensesTLSpan.textContent = totalExpenses.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                totalCollectionsTLSpan.textContent = totalCollections.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                const overallBalance = totalCollections - totalExpenses;
-                overallBalanceTLSpan.textContent = overallBalance.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                overallBalanceTLSpan.style.color = overallBalance >= 0 ? '#28a745' : '#dc3545';
 
-                displayCategoryAnalysis(categoryData, totalContractAmount);
+                displayCategoryAnalysis(categoryData, totalProjectCount, totalContractAmount);
                 displayDetailedProjects(filteredProjects);
                 showSystemMessage('Rapor başarıyla oluşturuldu.', false);
 
@@ -356,36 +307,36 @@
         function resetReportData() {
             totalProjectsSpan.textContent = '0';
             totalContractAmountTLSpan.textContent = '0,00 ₺';
-            totalExpensesTLSpan.textContent = '0,00 ₺';
-            totalCollectionsTLSpan.textContent = '0,00 ₺';
-            overallBalanceTLSpan.textContent = '0,00 ₺';
-            overallBalanceTLSpan.style.color = '';
-            categoryAnalysisTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Rapor oluşturmak için tarihleri seçin.</td></tr>';
+            categoryAnalysisTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Rapor oluşturmak için tarihleri seçin.</td></tr>';
             detailedProjectListBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Detaylı proje listesi için raporu oluşturun.</td></tr>';
         }
 
-        function displayCategoryAnalysis(categoryData, totalContractAmount) {
+        function displayCategoryAnalysis(categoryData, totalProjectCount, totalContractAmount) {
             categoryAnalysisTableBody.innerHTML = '';
 
             if (Object.keys(categoryData).length === 0) {
-                categoryAnalysisTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: #666;">Veri bulunamadı.</td></tr>';
+                categoryAnalysisTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: #666;">Veri bulunamadı.</td></tr>';
                 return;
             }
 
             Object.keys(categoryData).forEach(cat => {
                 const data = categoryData[cat];
+                const projeOrani = totalProjectCount > 0 ? ((data.projectCount / totalProjectCount) * 100).toFixed(2) : 0;
                 const ciroOrani = totalContractAmount > 0 ? ((data.totalContractAmount / totalContractAmount) * 100).toFixed(2) : 0;
 
                 const row = categoryAnalysisTableBody.insertRow();
                 row.insertCell(0).textContent = cat;
                 row.insertCell(1).textContent = data.projectCount;
-                row.insertCell(2).textContent = data.totalContractAmount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                row.insertCell(3).textContent = data.totalExpenses.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                row.insertCell(4).textContent = data.totalCollections.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                const oranCell = row.insertCell(5);
-                oranCell.textContent = `${ciroOrani}%`;
-                oranCell.style.fontWeight = '600';
-                oranCell.style.color = '#007bff';
+                const projeOranCell = row.insertCell(2);
+                projeOranCell.textContent = `${projeOrani}%`;
+                projeOranCell.style.fontWeight = '600';
+                projeOranCell.style.color = '#007bff';
+
+                row.insertCell(3).textContent = data.totalContractAmount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                const ciroOranCell = row.insertCell(4);
+                ciroOranCell.textContent = `${ciroOrani}%`;
+                ciroOranCell.style.fontWeight = '600';
+                ciroOranCell.style.color = '#28a745';
             });
         }
 
