@@ -7,7 +7,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Proje Detayları</title>
-    <!-- Favicon hatasını gidermek için boş bir simge -->
+    <!-- Favicon hatasını gidermek için -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'></svg>">
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
@@ -70,6 +70,11 @@
                 <label for="updateContractDate">Sözleşme Tarihi:</label>
                 <input type="date" id="updateContractDate" required>
             </div>
+            <div class="form-group">
+                <label for="updateContractExchangeRate">Kur (1 USD/EUR = ... TL):</label>
+                <input type="number" id="updateContractExchangeRate" step="0.0001" value="1" required>
+                <small>Kur otomatik çekilsin mi? Tarih ve para birimi seçin. Manuel girmek için yazın.</small>
+            </div>
             <div class="form-group full-width">
                 <button type="submit" class="button primary">Proje Bilgilerini Güncelle</button>
             </div>
@@ -102,7 +107,8 @@
                 </div>
                 <div class="form-group" id="expenseExchangeRateGroup">
                     <label for="exchangeRate">Kur (1 USD/EUR = ... TL):</label>
-                    <input type="number" id="exchangeRate" step="0.0001" value="1" readonly required>
+                    <input type="number" id="exchangeRate" step="0.0001" value="1" required>
+                    <small>Otomatik çekmek için tarih seçin. Manuel girmek için yazın.</small>
                 </div>
                 <div class="form-group">
                     <label for="expenseDate">Tarih:</label>
@@ -154,7 +160,8 @@
                 </div>
                 <div class="form-group" id="collectionExchangeRateGroup">
                     <label for="collectionExchangeRate">Kur (1 USD/EUR = ... TL):</label>
-                    <input type="number" id="collectionExchangeRate" step="0.0001" value="1" readonly required>
+                    <input type="number" id="collectionExchangeRate" step="0.0001" value="1" required>
+                    <small>Otomatik çekmek için tarih seçin. Manuel girmek için yazın.</small>
                 </div>
                 <div class="form-group">
                     <label for="collectionDate">Tarih:</label>
@@ -269,6 +276,7 @@
         const updateContractAmountInput = document.getElementById('updateContractAmount');
         const updateContractCurrencySelect = document.getElementById('updateContractCurrency');
         const updateContractDateInput = document.getElementById('updateContractDate');
+        const updateContractExchangeRateInput = document.getElementById('updateContractExchangeRate');
         const tabButtons = document.querySelectorAll('.tab-button');
         const tabContents = document.querySelectorAll('.tab-content');
         const addExpenseForm = document.getElementById('addExpenseForm');
@@ -355,7 +363,7 @@
                 return data.rates || {};
             } catch (error) {
                 console.error('Kur çekme hatası:', error);
-                showSystemMessage(`Kur bilgisi alınamadı: ${error.message}. Manuel giriniz.`, true);
+                showSystemMessage(`Kur bilgisi alınamadı: ${error.message}. Manuel girin.`, true);
                 return {};
             }
         }
@@ -372,6 +380,7 @@
                     projectSummaryStatus.textContent = project.status;
                     projectSummaryStatus.className = 'status-badge status-' + project.status.toLowerCase().replace(/ /g, '');
 
+                    // TL karşılığını hesapla
                     let contractAmountTL = project.contractAmount || 0;
                     if (project.contractCurrency !== 'TRY' && project.contractExchangeRate) {
                         contractAmountTL = project.contractAmount * project.contractExchangeRate;
@@ -394,6 +403,7 @@
                         const date = project.contractDate.toDate ? project.contractDate.toDate() : new Date(project.contractDate);
                         updateContractDateInput.value = date.toISOString().split('T')[0];
                     }
+                    updateContractExchangeRateInput.value = project.contractExchangeRate || 1;
 
                     showSystemMessage('Proje detayları yüklendi.', false);
                 } else {
@@ -414,16 +424,11 @@
             const contractAmount = parseFloat(updateContractAmountInput.value);
             const contractCurrency = updateContractCurrencySelect.value;
             const contractDate = updateContractDateInput.value;
+            const contractExchangeRate = parseFloat(updateContractExchangeRateInput.value);
 
-            let contractExchangeRate = 1;
-            if (contractCurrency !== 'TRY') {
-                const rates = await fetchTCMBRates(contractDate);
-                if (rates && rates[contractCurrency]) {
-                    contractExchangeRate = rates[contractCurrency];
-                } else {
-                    showSystemMessage(`${contractCurrency} kuru alınamadı. Lütfen geçerli bir tarih seçin.`, true);
-                    return;
-                }
+            if (!contractAmount || !contractCurrency || !contractDate || !contractExchangeRate || isNaN(contractExchangeRate)) {
+                showSystemMessage('Lütfen tüm sözleşme bilgilerini doldurun.', true);
+                return;
             }
 
             try {
@@ -502,24 +507,21 @@
             const expenseDate = expenseDateInput.value;
             if (selectedCurrency === 'TRY') {
                 expenseExchangeRateInput.value = '1';
-                expenseExchangeRateInput.readOnly = true;
                 expenseExchangeRateGroup.style.display = 'none';
             } else {
                 expenseExchangeRateGroup.style.display = 'block';
-                expenseExchangeRateInput.readOnly = true;
                 if (expenseDate) {
                     const rates = await fetchTCMBRates(expenseDate);
                     if (rates && rates[selectedCurrency]) {
-                        expenseExchangeRateInput.value = rates[selectedCurrency].toFixed(4);
+                        const rate = rates[selectedCurrency];
+                        if (expenseExchangeRateInput.value == 1 || expenseExchangeRateInput.value == '') {
+                            expenseExchangeRateInput.value = rate.toFixed(4);
+                        }
                     } else {
-                        expenseExchangeRateInput.value = '';
-                        showSystemMessage(`Seçilen tarih için ${selectedCurrency} kuru bulunamadı. Lütfen manuel giriniz.`, true);
-                        expenseExchangeRateInput.readOnly = false;
+                        showSystemMessage(`Seçilen tarih için ${selectedCurrency} kuru bulunamadı. Manuel girin.`, true);
                     }
                 } else {
-                    expenseExchangeRateInput.value = '';
-                    showSystemMessage('Lütfen kur çekmek için bir tarih seçiniz.', true);
-                    expenseExchangeRateInput.readOnly = false;
+                    showSystemMessage('Kur çekmek için tarih seçin veya manuel girin.', true);
                 }
             }
         });
@@ -531,12 +533,12 @@
                 if (expenseDate) {
                     const rates = await fetchTCMBRates(expenseDate);
                     if (rates && rates[selectedCurrency]) {
-                        expenseExchangeRateInput.value = rates[selectedCurrency].toFixed(4);
-                        expenseExchangeRateInput.readOnly = true;
+                        const rate = rates[selectedCurrency];
+                        if (expenseExchangeRateInput.value == 1 || expenseExchangeRateInput.value == '') {
+                            expenseExchangeRateInput.value = rate.toFixed(4);
+                        }
                     } else {
-                        expenseExchangeRateInput.value = '';
-                        showSystemMessage(`Seçilen tarih için ${selectedCurrency} kuru bulunamadı. Lütfen manuel giriniz.`, true);
-                        expenseExchangeRateInput.readOnly = false;
+                        showSystemMessage(`Seçilen tarih için ${selectedCurrency} kuru bulunamadı. Manuel girin.`, true);
                     }
                 }
             }
@@ -574,7 +576,7 @@
                     showSystemMessage('Barter açıklaması zorunludur.', true);
                     return;
                 }
-                amountTL = amount; // Barter'da TL olarak kabul edilir
+                amountTL = amount;
             } else {
                 amountTL = amount * exchangeRate;
             }
@@ -619,24 +621,21 @@
             const selectedType = collectionTypeSelect.value;
             if (selectedCurrency === 'TRY' || selectedType === 'Barter') {
                 collectionExchangeRateInput.value = '1';
-                collectionExchangeRateInput.readOnly = true;
                 collectionExchangeRateGroup.style.display = 'none';
             } else {
                 collectionExchangeRateGroup.style.display = 'block';
-                collectionExchangeRateInput.readOnly = true;
                 if (collectionDate) {
                     const rates = await fetchTCMBRates(collectionDate);
                     if (rates && rates[selectedCurrency]) {
-                        collectionExchangeRateInput.value = rates[selectedCurrency].toFixed(4);
+                        const rate = rates[selectedCurrency];
+                        if (collectionExchangeRateInput.value == 1 || collectionExchangeRateInput.value == '') {
+                            collectionExchangeRateInput.value = rate.toFixed(4);
+                        }
                     } else {
-                        collectionExchangeRateInput.value = '';
-                        showSystemMessage(`Seçilen tarih için ${selectedCurrency} kuru bulunamadı. Lütfen manuel giriniz.`, true);
-                        collectionExchangeRateInput.readOnly = false;
+                        showSystemMessage(`Seçilen tarih için ${selectedCurrency} kuru bulunamadı. Manuel girin.`, true);
                     }
                 } else {
-                    collectionExchangeRateInput.value = '';
-                    showSystemMessage('Lütfen kur çekmek için bir tarih seçiniz.', true);
-                    collectionExchangeRateInput.readOnly = false;
+                    showSystemMessage('Kur çekmek için tarih seçin veya manuel girin.', true);
                 }
             }
         });
@@ -649,12 +648,12 @@
                 if (collectionDate) {
                     const rates = await fetchTCMBRates(collectionDate);
                     if (rates && rates[selectedCurrency]) {
-                        collectionExchangeRateInput.value = rates[selectedCurrency].toFixed(4);
-                        collectionExchangeRateInput.readOnly = true;
+                        const rate = rates[selectedCurrency];
+                        if (collectionExchangeRateInput.value == 1 || collectionExchangeRateInput.value == '') {
+                            collectionExchangeRateInput.value = rate.toFixed(4);
+                        }
                     } else {
-                        collectionExchangeRateInput.value = '';
-                        showSystemMessage(`Seçilen tarih için ${selectedCurrency} kuru bulunamadı. Lütfen manuel giriniz.`, true);
-                        collectionExchangeRateInput.readOnly = false;
+                        showSystemMessage(`Seçilen tarih için ${selectedCurrency} kuru bulunamadı. Manuel girin.`, true);
                     }
                 }
             }
@@ -672,12 +671,8 @@
                 collectionCurrencySelect.value = 'TRY';
                 collectionExchangeRateInput.value = '1';
                 collectionExchangeRateGroup.style.display = 'none';
-            } else {
-                if (collectionCurrencySelect.value !== 'TRY') {
-                    collectionExchangeRateGroup.style.display = 'block';
-                    collectionCurrencySelect.dispatchEvent(new Event('change'));
-                }
             }
+            collectionCurrencySelect.dispatchEvent(new Event('change'));
         });
 
         async function deleteFinancialItem(collectionName, docId, description) {
@@ -695,81 +690,50 @@
 
         async function loadFinancialData(projectId) {
             try {
+                const projectDoc = await db.collection('projects').doc(projectId).get();
+                const project = projectDoc.data();
+
+                // Sözleşme bedelini TL'ye çevir
+                let contractAmountTL = project.contractAmount || 0;
+                if (project.contractCurrency !== 'TRY' && project.contractExchangeRate) {
+                    contractAmountTL = project.contractAmount * project.contractExchangeRate;
+                }
+
+                // Harcamalar
                 const expensesSnapshot = await db.collection('projects').doc(projectId).collection('expenses').orderBy('date', 'desc').get();
-                expenseListBody.innerHTML = '';
                 let totalExpenses = 0;
-                if (expensesSnapshot.empty) {
-                    expenseListBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Henüz harcama eklenmedi.</td></tr>';
-                } else {
+                if (!expensesSnapshot.empty) {
                     expensesSnapshot.forEach(doc => {
                         const expense = doc.data();
-                        const row = expenseListBody.insertRow();
-                        let formattedDate = 'N/A';
-                        if (expense.date) {
-                            if (typeof expense.date.toDate === 'function') {
-                                formattedDate = new Date(expense.date.toDate()).toLocaleDateString('tr-TR');
-                            } else if (typeof expense.date === 'string') {
-                                formattedDate = new Date(expense.date).toLocaleDateString('tr-TR');
-                            }
-                        }
-                        row.insertCell(0).textContent = formattedDate;
-                        row.insertCell(1).textContent = expense.description;
-                        row.insertCell(2).textContent = expense.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        row.insertCell(3).textContent = expense.currency;
-                        row.insertCell(4).textContent = expense.exchangeRate ? expense.exchangeRate.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) : '-';
-                        row.insertCell(5).textContent = expense.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                        const actionsCell = row.insertCell(6);
-                        actionsCell.classList.add('actions-cell');
-                        const deleteBtn = document.createElement('button');
-                        deleteBtn.textContent = 'Sil';
-                        deleteBtn.classList.add('delete-btn');
-                        deleteBtn.addEventListener('click', () => deleteFinancialItem('expenses', doc.id, expense.description));
-                        actionsCell.appendChild(deleteBtn);
                         totalExpenses += expense.amountTL;
                     });
                 }
 
+                // Tahsilatlar
                 const collectionsSnapshot = await db.collection('projects').doc(projectId).collection('collections').orderBy('date', 'desc').get();
-                collectionListBody.innerHTML = '';
                 let totalCollections = 0;
-                if (collectionsSnapshot.empty) {
-                    collectionListBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Henüz tahsilat eklenmedi.</td></tr>';
-                } else {
+                if (!collectionsSnapshot.empty) {
                     collectionsSnapshot.forEach(doc => {
                         const collection = doc.data();
-                        const row = collectionListBody.insertRow();
-                        let formattedDate = 'N/A';
-                        if (collection.date) {
-                            if (typeof collection.date.toDate === 'function') {
-                                formattedDate = new Date(collection.date.toDate()).toLocaleDateString('tr-TR');
-                            } else if (typeof collection.date === 'string') {
-                                formattedDate = new Date(collection.date).toLocaleDateString('tr-TR');
-                            }
-                        }
-                        row.insertCell(0).textContent = formattedDate;
-                        row.insertCell(1).textContent = collection.description;
-                        row.insertCell(2).textContent = collection.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        row.insertCell(3).textContent = collection.currency;
-                        row.insertCell(4).textContent = collection.exchangeRate ? collection.exchangeRate.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) : '-';
-                        row.insertCell(5).textContent = collection.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                        row.insertCell(6).textContent = collection.collectionType || 'Belirtilmemiş';
-                        const actionsCell = row.insertCell(7);
-                        actionsCell.classList.add('actions-cell');
-                        const deleteBtn = document.createElement('button');
-                        deleteBtn.textContent = 'Sil';
-                        deleteBtn.classList.add('delete-btn');
-                        deleteBtn.addEventListener('click', () => deleteFinancialItem('collections', doc.id, collection.description));
-                        actionsCell.appendChild(deleteBtn);
                         totalCollections += collection.amountTL;
                     });
                 }
 
+                // Özetleri güncelle
                 totalExpensesTL.textContent = totalExpenses.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 totalCollectionsTL.textContent = totalCollections.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                const remainingBalance = totalCollections - totalExpenses;
+
+                // Kalan Bakiye: Sözleşme Bedeli - Toplam Tahsilat
+                const remainingBalance = contractAmountTL - totalCollections;
                 remainingBalanceTL.textContent = remainingBalance.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 remainingBalanceTL.classList.remove('positive', 'negative');
                 remainingBalanceTL.classList.add(remainingBalance >= 0 ? 'positive' : 'negative');
+
+                // Harcama ve tahsilat listelerini güncelle
+                updateExpenseTable(expensesSnapshot);
+                updateCollectionTable(collectionsSnapshot);
+
+                // Grafiği güncelle
                 updateBalanceChart(totalCollections, totalExpenses);
             } catch (error) {
                 console.error('Finansal veriler yüklenirken hata oluştu:', error);
@@ -777,27 +741,78 @@
             }
         }
 
-        function updateBalanceChart(collections, expenses) {
-            const ctx = document.getElementById('balanceChart').getContext('2d');
-            if (balanceChart) {
-                balanceChart.destroy();
+        function updateExpenseTable(snapshot) {
+            expenseListBody.innerHTML = '';
+            if (snapshot.empty) {
+                expenseListBody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Henüz harcama eklenmedi.</td></tr>';
+                return;
             }
+            snapshot.forEach(doc => {
+                const expense = doc.data();
+                const row = expenseListBody.insertRow();
+                const formattedDate = expense.date.toDate ? expense.date.toDate().toLocaleDateString('tr-TR') : 'N/A';
+                row.insertCell(0).textContent = formattedDate;
+                row.insertCell(1).textContent = expense.description;
+                row.insertCell(2).textContent = expense.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+                row.insertCell(3).textContent = expense.currency;
+                row.insertCell(4).textContent = expense.exchangeRate?.toLocaleString('tr-TR', { minimumFractionDigits: 4 }) || '-';
+                row.insertCell(5).textContent = expense.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                const actionsCell = row.insertCell(6);
+                actionsCell.classList.add('actions-cell');
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'Sil';
+                deleteBtn.classList.add('delete-btn');
+                deleteBtn.addEventListener('click', () => deleteFinancialItem('expenses', doc.id, expense.description));
+                actionsCell.appendChild(deleteBtn);
+            });
+        }
+
+        function updateCollectionTable(snapshot) {
+            collectionListBody.innerHTML = '';
+            if (snapshot.empty) {
+                collectionListBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Henüz tahsilat eklenmedi.</td></tr>';
+                return;
+            }
+            snapshot.forEach(doc => {
+                const collection = doc.data();
+                const row = collectionListBody.insertRow();
+                const formattedDate = collection.date.toDate ? collection.date.toDate().toLocaleDateString('tr-TR') : 'N/A';
+                row.insertCell(0).textContent = formattedDate;
+                row.insertCell(1).textContent = collection.description;
+                row.insertCell(2).textContent = collection.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+                row.insertCell(3).textContent = collection.currency;
+                row.insertCell(4).textContent = collection.exchangeRate?.toLocaleString('tr-TR', { minimumFractionDigits: 4 }) || '-';
+                row.insertCell(5).textContent = collection.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                row.insertCell(6).textContent = collection.collectionType || 'Belirtilmemiş';
+                const actionsCell = row.insertCell(7);
+                actionsCell.classList.add('actions-cell');
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'Sil';
+                deleteBtn.classList.add('delete-btn');
+                deleteBtn.addEventListener('click', () => deleteFinancialItem('collections', doc.id, collection.description));
+                actionsCell.appendChild(deleteBtn);
+            });
+        }
+
+        function updateBalanceChart(tahsilat, harcama) {
+            const ctx = document.getElementById('balanceChart').getContext('2d');
+            if (balanceChart) balanceChart.destroy();
             balanceChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: ['Toplam Tahsilat', 'Toplam Harcama', 'Kalan Bakiye'],
                     datasets: [{
                         label: 'Tutar (TL)',
-                        data: [collections, expenses, collections - expenses],
+                        data: [tahsilat, harcama, tahsilat - harcama],
                         backgroundColor: [
                             'rgba(40, 167, 69, 0.7)',
                             'rgba(220, 53, 69, 0.7)',
-                            (collections - expenses >= 0) ? 'rgba(0, 123, 255, 0.7)' : 'rgba(255, 193, 7, 0.7)'
+                            (tahsilat - harcama >= 0) ? 'rgba(0, 123, 255, 0.7)' : 'rgba(255, 193, 7, 0.7)'
                         ],
                         borderColor: [
                             'rgba(40, 167, 69, 1)',
                             'rgba(220, 53, 69, 1)',
-                            (collections - expenses >= 0) ? 'rgba(0, 123, 255, 1)' : 'rgba(255, 193, 7, 1)'
+                            (tahsilat - harcama >= 0) ? 'rgba(0, 123, 255, 1)' : 'rgba(255, 193, 7, 1)'
                         ],
                         borderWidth: 1
                     }]
@@ -807,21 +822,10 @@
                     maintainAspectRatio: false,
                     plugins: {
                         legend: { display: false },
-                        title: {
-                            display: true,
-                            text: 'Proje Finansal Durumu',
-                            font: { size: 16 }
-                        },
+                        title: { display: true, text: 'Proje Finansal Durumu', font: { size: 16 } },
                         tooltip: {
                             callbacks: {
-                                label: function(context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) label += ': ';
-                                    if (context.parsed.y !== null) {
-                                        label += context.parsed.y.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 2 });
-                                    }
-                                    return label;
-                                }
+                                label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })}`
                             }
                         }
                     },
@@ -829,9 +833,7 @@
                         y: {
                             beginAtZero: true,
                             ticks: {
-                                callback: function(value) {
-                                    return value.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 });
-                                }
+                                callback: value => value.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 })
                             }
                         }
                     }
