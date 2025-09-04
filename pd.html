@@ -795,51 +795,52 @@
         }
 
         function updateBalanceChart(tahsilat, harcama) {
-            const ctx = document.getElementById('balanceChart').getContext('2d');
-            if (balanceChart) balanceChart.destroy();
-            balanceChart = new Chart(ctx, {
-                type: 'bar',
-                 {
-                    labels: ['Toplam Tahsilat', 'Toplam Harcama', 'Kalan Bakiye'],
-                    datasets: [{
-                        label: 'Tutar (TL)',
-                        data: [tahsilat, harcama, tahsilat - harcama],
-                        backgroundColor: [
-                            'rgba(40, 167, 69, 0.7)',
-                            'rgba(220, 53, 69, 0.7)',
-                            (tahsilat - harcama >= 0) ? 'rgba(0, 123, 255, 0.7)' : 'rgba(255, 193, 7, 0.7)'
-                        ],
-                        borderColor: [
-                            'rgba(40, 167, 69, 1)',
-                            'rgba(220, 53, 69, 1)',
-                            (tahsilat - harcama >= 0) ? 'rgba(0, 123, 255, 1)' : 'rgba(255, 193, 7, 1)'
-                        ],
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        title: { display: true, text: 'Proje Finansal Durumu', font: { size: 16 } },
-                        tooltip: {
-                            callbacks: {
-                                label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })}`
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                callback: value => value.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 })
-                            }
-                        }
+    const ctx = document.getElementById('balanceChart').getContext('2d');
+    if (balanceChart) balanceChart.destroy();
+
+    balanceChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Toplam Tahsilat', 'Toplam Harcama', 'Kalan Bakiye'],
+            datasets: [{
+                label: 'Tutar (TL)',
+                data: [tahsilat, harcama, tahsilat - harcama],
+                backgroundColor: [
+                    'rgba(40, 167, 69, 0.7)',
+                    'rgba(220, 53, 69, 0.7)',
+                    (tahsilat - harcama >= 0) ? 'rgba(0, 123, 255, 0.7)' : 'rgba(255, 193, 7, 0.7)'
+                ],
+                borderColor: [
+                    'rgba(40, 167, 69, 1)',
+                    'rgba(220, 53, 69, 1)',
+                    (tahsilat - harcama >= 0) ? 'rgba(0, 123, 255, 1)' : 'rgba(255, 193, 7, 1)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                title: { display: true, text: 'Proje Finansal Durumu', font: { size: 16 } },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })}`
                     }
                 }
-            });
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: value => value.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 })
+                    }
+                }
+            }
         }
+    });
+}
 
         document.addEventListener('DOMContentLoaded', () => {
             const today = new Date();
