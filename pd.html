@@ -73,7 +73,7 @@
             <div class="form-group">
                 <label for="updateContractExchangeRate">Kur (1 USD/EUR = ... TL):</label>
                 <input type="number" id="updateContractExchangeRate" step="0.0001" value="1" required>
-                <small>Kur otomatik çekilsin mi? Tarih ve para birimi seçin. Manuel girmek için yazın.</small>
+                <small>Tarih ve para birimi seçildiğinde otomatik gelir. Manuel girmek için yazın.</small>
             </div>
             <div class="form-group full-width">
                 <button type="submit" class="button primary">Proje Bilgilerini Güncelle</button>
@@ -426,7 +426,7 @@
             const contractDate = updateContractDateInput.value;
             const contractExchangeRate = parseFloat(updateContractExchangeRateInput.value);
 
-            if (!contractAmount || !contractCurrency || !contractDate || !contractExchangeRate || isNaN(contractExchangeRate)) {
+            if (!contractAmount || !contractCurrency || !contractDate || isNaN(contractExchangeRate) || contractExchangeRate <= 0) {
                 showSystemMessage('Lütfen tüm sözleşme bilgilerini doldurun.', true);
                 return;
             }
@@ -799,7 +799,7 @@
             if (balanceChart) balanceChart.destroy();
             balanceChart = new Chart(ctx, {
                 type: 'bar',
-                data: {
+                 {
                     labels: ['Toplam Tahsilat', 'Toplam Harcama', 'Kalan Bakiye'],
                     datasets: [{
                         label: 'Tutar (TL)',
