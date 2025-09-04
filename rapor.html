@@ -407,66 +407,65 @@
         }
 
         // Durum Dağılımı Grafiği
-        function updateStatusChart(statusCounts) {
-            const labels = Object.keys(statusCounts);
-            const data = Object.values(statusCounts);
+       function updateStatusChart(statusCounts) {
+    const labels = Object.keys(statusCounts);
+    const data = Object.values(statusCounts);
 
-            const backgroundColors = labels.map(status => {
-                switch (status) {
-                    case 'Başlamadı': return '#6c757d'; // Gri
-                    case 'Devam Ediyor': return '#007bff'; // Mavi
-                    case 'Takip Ediliyor': return '#ffc107'; // Sarı
-                    case 'Tamamlandı': return '#28a745'; // Yeşil
-                    default: return '#cccccc';
-                }
-            });
+    const backgroundColors = labels.map(status => {
+        switch (status) {
+            case 'Başlamadı': return '#6c757d'; // Gri
+            case 'Devam Ediyor': return '#007bff'; // Mavi
+            case 'Takip Ediliyor': return '#ffc107'; // Sarı
+            case 'Tamamlandı': return '#28a745'; // Yeşil
+            default: return '#cccccc';
+        }
+    });
 
-            const ctx = document.getElementById('statusChart').getContext('2d');
-            if (statusChart) {
-                statusChart.destroy();
-            }
-            statusChart = new Chart(ctx, {
-                type: 'doughnut',
-                 {
-                    labels: labels,
-                    datasets: [{
-                        data: data,
-                        backgroundColor: backgroundColors,
-                        hoverOffset: 4
-                    }]
+    const ctx = document.getElementById('statusChart').getContext('2d');
+    if (statusChart) {
+        statusChart.destroy();
+    }
+    statusChart = new Chart(ctx, {
+        type: 'doughnut',
+         {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: backgroundColors,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top',
                 },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            position: 'top',
-                        },
-                        title: {
-                            display: true,
-                            text: 'Proje Durum Dağılımı',
-                            font: {
-                                size: 16
+                title: {
+                    display: true,
+                    text: 'Proje Durum Dağılımı',
+                    font: {
+                        size: 16
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.label || '';
+                            if (label) {
+                                label += ': ';
                             }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.label || '';
-                                    if (label) {
-                                        label += ': ';
-                                    }
-                                    if (context.parsed !== null) {
-                                        label += context.parsed + ' Proje';
-                                    }
-                                    return label;
-                                }
+                            if (context.parsed !== null) {
+                                label += context.parsed + ' Proje';
                             }
+                            return label;
                         }
                     }
                 }
-            });
+            }
         }
-
+    });
+}
         // Kategori Analizi Tablosu
         function displayCategoryAnalysis(categoryData) {
             categoryAnalysisTableBody.innerHTML = '';
