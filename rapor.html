@@ -63,22 +63,17 @@
             </div>
         </div>
 
-        <h2 class="section-title">Duruma Göre Proje Dağılımı</h2>
-        <div class="chart-container">
-            <canvas id="statusChart"></canvas>
-        </div>
-
         <h2 class="section-title">Kategori Bazında Finansal Analiz</h2>
         <div class="financial-table-container">
             <table class="financial-table">
                 <thead>
-                    <tr id="categoryTableHeader">
-                        <th data-sort="category" class="sortable">Kategori <span class="sort-icon"></span></th>
-                        <th data-sort="projectCount" class="sortable">Proje Sayısı <span class="sort-icon"></span></th>
-                        <th data-sort="totalContractAmount" class="sortable">Toplam Sözleşme Bedeli (TL) <span class="sort-icon"></span></th>
-                        <th data-sort="totalExpenses" class="sortable">Toplam Harcama (TL) <span class="sort-icon"></span></th>
-                        <th data-sort="totalCollections" class="sortable">Toplam Tahsilat (TL) <span class="sort-icon"></span></th>
-                        <th data-sort="balance" class="sortable">Bakiye (TL) <span class="sort-icon"></span></th>
+                    <tr>
+                        <th>Kategori</th>
+                        <th>Proje Sayısı</th>
+                        <th>Toplam Sözleşme Bedeli (TL)</th>
+                        <th>Toplam Harcama (TL)</th>
+                        <th>Toplam Tahsilat (TL)</th>
+                        <th>Ciro Oranı (%)</th>
                     </tr>
                 </thead>
                 <tbody id="categoryAnalysisTableBody">
@@ -147,7 +142,6 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyBNwSpbpNuQQ4nTjDAlB6izu5IgkEZxDL0",
@@ -166,8 +160,6 @@
         let allProjects = [];
         let filteredProjects = [];
 
-        let statusChart = null;
-
         const userEmailSpan = document.getElementById('userEmail');
         const logoutButton = document.getElementById('logoutButton');
         const systemMessageDiv = document.getElementById('systemMessage');
@@ -183,16 +175,11 @@
         const overallBalanceTLSpan = document.getElementById('overallBalanceTL');
 
         const categoryAnalysisTableBody = document.getElementById('categoryAnalysisTableBody');
-        const categoryTableHeader = document.getElementById('categoryTableHeader');
-
         const detailedFilterStatus = document.getElementById('detailedFilterStatus');
         const detailedFilterCategory = document.getElementById('detailedFilterCategory');
         const detailedSortBy = document.getElementById('detailedSortBy');
         const resetDetailedFiltersButton = document.getElementById('resetDetailedFilters');
         const detailedProjectListBody = document.getElementById('detailedProjectListBody');
-
-        let currentCategorySortColumn = 'category';
-        let currentCategorySortDirection = 'asc';
 
         auth.onAuthStateChanged(user => {
             if (user) {
@@ -285,7 +272,6 @@
                 let totalContractAmount = 0;
                 let totalExpenses = 0;
                 let totalCollections = 0;
-                const statusCounts = {};
                 const categoryData = {};
 
                 for (const doc of snapshot.docs) {
@@ -306,8 +292,6 @@
                     }
                     totalContractAmount += contractAmountTL;
 
-                    statusCounts[project.status] = (statusCounts[project.status] || 0) + 1;
-
                     const expensesSnapshot = await db.collection('projects').doc(projectId).collection('expenses')
                         .where('date', '>=', startDateInput.value || '1900-01-01')
                         .where('date', '<=', endDateInput.value || '2100-12-31')
@@ -318,7 +302,7 @@
                         totalExpenses += amountTL;
 
                         project.categories.forEach(cat => {
-                            if (!categoryData[cat]) categoryData[cat] = { projectCount: 0, totalContractAmount: 0, totalExpenses: 0, totalCollections: 0, balance: 0 };
+                            if (!categoryData[cat]) categoryData[cat] = { projectCount: 0, totalContractAmount: 0, totalExpenses: 0, totalCollections: 0 };
                             categoryData[cat].totalExpenses += amountTL;
                         });
                     });
@@ -333,13 +317,13 @@
                         totalCollections += amountTL;
 
                         project.categories.forEach(cat => {
-                            if (!categoryData[cat]) categoryData[cat] = { projectCount: 0, totalContractAmount: 0, totalExpenses: 0, totalCollections: 0, balance: 0 };
+                            if (!categoryData[cat]) categoryData[cat] = { projectCount: 0, totalContractAmount: 0, totalExpenses: 0, totalCollections: 0 };
                             categoryData[cat].totalCollections += amountTL;
                         });
                     });
 
                     project.categories.forEach(cat => {
-                        if (!categoryData[cat]) categoryData[cat] = { projectCount: 0, totalContractAmount: 0, totalExpenses: 0, totalCollections: 0, balance: 0 };
+                        if (!categoryData[cat]) categoryData[cat] = { projectCount: 0, totalContractAmount: 0, totalExpenses: 0, totalCollections: 0 };
                         const projectCreatedAt = project.createdAt ? project.createdAt.toDate() : new Date(0);
                         if ((!startDate || projectCreatedAt >= startDate) && (!endDate || projectCreatedAt <= endDate)) {
                             categoryData[cat].projectCount++;
@@ -358,8 +342,7 @@
                 overallBalanceTLSpan.textContent = overallBalance.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 overallBalanceTLSpan.style.color = overallBalance >= 0 ? '#28a745' : '#dc3545';
 
-                updateStatusChart(statusCounts);
-                displayCategoryAnalysis(categoryData);
+                displayCategoryAnalysis(categoryData, totalContractAmount);
                 displayDetailedProjects(filteredProjects);
                 showSystemMessage('Rapor başarıyla oluşturuldu.', false);
 
@@ -377,54 +360,11 @@
             totalCollectionsTLSpan.textContent = '0,00 ₺';
             overallBalanceTLSpan.textContent = '0,00 ₺';
             overallBalanceTLSpan.style.color = '';
-
-            if (statusChart) statusChart.destroy();
             categoryAnalysisTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Rapor oluşturmak için tarihleri seçin.</td></tr>';
             detailedProjectListBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Detaylı proje listesi için raporu oluşturun.</td></tr>';
         }
 
-        function updateStatusChart(statusCounts) {
-            const labels = Object.keys(statusCounts);
-            const data = Object.values(statusCounts);
-
-            const backgroundColors = labels.map(status => {
-                switch (status) {
-                    case 'Başlamadı': return '#6c757d';
-                    case 'Devam Ediyor': return '#007bff';
-                    case 'Takip Ediliyor': return '#ffc107';
-                    case 'Tamamlandı': return '#28a745';
-                    default: return '#cccccc';
-                }
-            });
-
-            const ctx = document.getElementById('statusChart').getContext('2d');
-            if (statusChart) statusChart.destroy();
-            statusChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        data: data,
-                        backgroundColor: backgroundColors,
-                        hoverOffset: 4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: { position: 'top' },
-                        title: { display: true, text: 'Proje Durum Dağılımı', font: { size: 16 } },
-                        tooltip: {
-                            callbacks: {
-                                label: context => `${context.label}: ${context.parsed} Proje`
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        function displayCategoryAnalysis(categoryData) {
+        function displayCategoryAnalysis(categoryData, totalContractAmount) {
             categoryAnalysisTableBody.innerHTML = '';
 
             if (Object.keys(categoryData).length === 0) {
@@ -432,72 +372,22 @@
                 return;
             }
 
-            let sortedCategories = Object.keys(categoryData).map(cat => ({
-                category: cat,
-                projectCount: categoryData[cat].projectCount,
-                totalContractAmount: categoryData[cat].totalContractAmount,
-                totalExpenses: categoryData[cat].totalExpenses,
-                totalCollections: categoryData[cat].totalCollections,
-                balance: categoryData[cat].totalCollections - categoryData[cat].totalExpenses
-            }));
+            Object.keys(categoryData).forEach(cat => {
+                const data = categoryData[cat];
+                const ciroOrani = totalContractAmount > 0 ? ((data.totalContractAmount / totalContractAmount) * 100).toFixed(2) : 0;
 
-            sortedCategories.sort((a, b) => {
-                let valA = a[currentCategorySortColumn], valB = b[currentCategorySortColumn];
-                if (currentCategorySortColumn === 'category') {
-                    valA = a.category.toLowerCase();
-                    valB = b.category.toLowerCase();
-                }
-                if (valA < valB) return currentCategorySortDirection === 'asc' ? -1 : 1;
-                if (valA > valB) return currentCategorySortDirection === 'asc' ? 1 : -1;
-                return 0;
-            });
-
-            sortedCategories.forEach(data => {
                 const row = categoryAnalysisTableBody.insertRow();
-                const catCell = row.insertCell(0);
-                catCell.textContent = data.category;
-                catCell.classList.add('category-name');
-                catCell.dataset.category = data.category;
-
+                row.insertCell(0).textContent = cat;
                 row.insertCell(1).textContent = data.projectCount;
                 row.insertCell(2).textContent = data.totalContractAmount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 row.insertCell(3).textContent = data.totalExpenses.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 row.insertCell(4).textContent = data.totalCollections.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                const balCell = row.insertCell(5);
-                balCell.textContent = data.balance.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                balCell.style.color = data.balance >= 0 ? '#28a745' : '#dc3545';
-                balCell.style.fontWeight = '600';
-                balCell.style.textAlign = 'right';
-            });
-
-            categoryAnalysisTableBody.querySelectorAll('.category-name').forEach(cell => {
-                cell.addEventListener('click', e => {
-                    detailedFilterCategory.value = e.target.dataset.category;
-                    displayDetailedProjects(filteredProjects);
-                });
+                const oranCell = row.insertCell(5);
+                oranCell.textContent = `${ciroOrani}%`;
+                oranCell.style.fontWeight = '600';
+                oranCell.style.color = '#007bff';
             });
         }
-
-        categoryTableHeader.querySelectorAll('.sortable').forEach(header => {
-            header.addEventListener('click', () => {
-                const sortColumn = header.dataset.sort;
-                categoryTableHeader.querySelectorAll('.sortable .sort-icon').forEach(icon => icon.classList.remove('asc', 'desc'));
-
-                if (currentCategorySortColumn === sortColumn) {
-                    currentCategorySortDirection = currentCategorySortDirection === 'asc' ? 'desc' : 'asc';
-                } else {
-                    currentCategorySortColumn = sortColumn;
-                    currentCategorySortDirection = 'asc';
-                }
-
-                header.querySelector('.sort-icon').classList.add(currentCategorySortDirection);
-                displayCategoryAnalysis(Object.keys(categoryData).reduce((acc, key) => {
-                    const d = categoryData[key];
-                    acc[key] = { ...d, balance: d.totalCollections - d.totalExpenses };
-                    return acc;
-                }, {}));
-            });
-        });
 
         function displayDetailedProjects(projectsToDisplay) {
             detailedProjectListBody.innerHTML = '';
@@ -531,7 +421,7 @@
                 return;
             }
 
-            currentProjects.forEach(async (project) => {
+            currentProjects.forEach(project => {
                 const row = detailedProjectListBody.insertRow();
                 row.insertCell(0).textContent = project.projectName;
                 row.insertCell(1).textContent = project.customerName;
