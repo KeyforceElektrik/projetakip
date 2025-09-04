@@ -162,14 +162,14 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
 
-        const EXCHANGE_RATE_FUNCTION_URL = 'https://us-central1-projetakip-e3a75.cloudfunctions.net/getExchangeRate';
-
         let currentUserId = null;
-        let allProjects = [];
-        let filteredProjects = [];
+        let allProjects = []; // Tüm projeler
+        let filteredProjects = []; // Filtrelenmiş projeler
 
+        // Chart.js grafikleri için değişkenler
         let statusChart = null;
 
+        // DOM Elementleri
         const userEmailSpan = document.getElementById('userEmail');
         const logoutButton = document.getElementById('logoutButton');
         const systemMessageDiv = document.getElementById('systemMessage');
@@ -196,41 +196,14 @@
         let currentCategorySortColumn = 'category';
         let currentCategorySortDirection = 'asc';
 
-        // TCMB'den kur çekme fonksiyonu
-        async function fetchTCMBRates(dateString) {
-            try {
-                const cloudFnResponse = await fetch(`${EXCHANGE_RATE_FUNCTION_URL}?date=${dateString}`);
-                if (!cloudFnResponse.ok) {
-                    throw new Error(`Kur bilgisi alınamadı. HTTP ${cloudFnResponse.status}`);
-                }
-                const data = await cloudFnResponse.json();
-                return data.rates || {};
-            } catch (error) {
-                console.error('Kur çekme hatası:', error);
-                return {};
-            }
-        }
-
-        // Projenin sözleşme bedelini TL'ye çevir
-        async function getContractAmountTL(contractAmount, contractCurrency, contractDate) {
-            if (contractCurrency === 'TRY') return contractAmount || 0;
-            if (!contractDate) return 0;
-
-            const dateStr = contractDate.toDate().toISOString().split('T')[0];
-            const rates = await fetchTCMBRates(dateStr);
-
-            if (rates && typeof rates[contractCurrency] === 'number') {
-                return contractAmount * rates[contractCurrency];
-            }
-            return 0;
-        }
-
+        // Kullanıcı giriş durumunu izle
         auth.onAuthStateChanged(user => {
             if (user) {
                 currentUserId = user.uid;
                 userEmailSpan.textContent = user.email;
                 showSystemMessage('Rapor sayfası yüklendi. Tarihleri seçerek rapor oluşturabilirsiniz.', false);
 
+                // Varsayılan tarihleri ayarla: Bu ayın 1'i - Bugün
                 const today = new Date();
                 const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
                 
@@ -244,12 +217,15 @@
                 startDateInput.value = format(firstDayOfMonth);
                 endDateInput.value = format(today);
 
+                // Sayfa yüklendiğinde otomatik rapor oluştur
                 generateReport();
+
             } else {
                 window.location.href = 'auth.html';
             }
         });
 
+        // Çıkış yap butonu işlevi
         logoutButton.addEventListener('click', async () => {
             try {
                 await auth.signOut();
@@ -260,9 +236,10 @@
             }
         });
 
+        // Sistem mesajlarını gösteren yardımcı fonksiyon
         function showSystemMessage(message, isError = false) {
             systemMessageDiv.textContent = message;
-            systemMessageDiv.className = 'message';
+            systemMessageDiv.className = 'message'; // Tüm sınıfları sıfırla
             if (isError) {
                 systemMessageDiv.classList.add('error-message');
             } else {
@@ -274,6 +251,7 @@
             }, 5000);
         }
 
+        // Rapor Oluştur butonu
         generateReportButton.addEventListener('click', generateReport);
         detailedFilterStatus.addEventListener('change', () => displayDetailedProjects(filteredProjects));
         detailedFilterCategory.addEventListener('change', () => displayDetailedProjects(filteredProjects));
@@ -285,9 +263,10 @@
             displayDetailedProjects(filteredProjects);
         });
 
+        // Rapor Oluştur Fonksiyonu
         async function generateReport() {
             if (!currentUserId) {
-                showSystemMessage('Kullanıcı bilgileri yükleniyor...', true);
+                showSystemMessage('Kullanıcı bilgileri yükleniyor, lütfen bekleyin.', true);
                 return;
             }
 
@@ -300,7 +279,7 @@
             }
 
             showSystemMessage('Rapor oluşturuluyor...', false);
-            resetReportData();
+            resetReportData(); // Önceki verileri temizle
 
             try {
                 const projectsRef = db.collection('projects').where('ownerId', '==', currentUserId);
@@ -309,7 +288,7 @@
                 let tempFilteredProjects = [];
 
                 if (snapshot.empty) {
-                    showSystemMessage('Henüz hiç proje yok.', true);
+                    showSystemMessage('Henüz hiç proje yok. Lütfen önce proje ekleyin.', true);
                     return;
                 }
 
@@ -317,14 +296,14 @@
                 let totalExpenses = 0;
                 let totalCollections = 0;
                 const statusCounts = {};
-                const categoryData = {};
+                const categoryData = {}; // Kategori bazında analiz için
 
                 for (const doc of snapshot.docs) {
                     const project = doc.data();
                     const projectId = doc.id;
 
+                    // Proje oluşturma tarihi filtresi
                     const createdAt = project.createdAt ? project.createdAt.toDate() : null;
-
                     if (createdAt) {
                         if (startDate && createdAt < startDate) continue;
                         if (endDate && createdAt > endDate) continue;
@@ -332,17 +311,17 @@
 
                     tempFilteredProjects.push({ id: projectId, ...project });
 
-                    // TL karşılığını hesapla
-                    const contractAmountTL = await getContractAmountTL(
-                        project.contractAmount || 0,
-                        project.contractCurrency || 'TRY',
-                        project.contractDate
-                    );
+                    // Sözleşme bedelini TL'ye çevir
+                    let contractAmountTL = project.contractAmount || 0;
+                    if (project.contractCurrency !== 'TRY' && project.contractExchangeRate) {
+                        contractAmountTL = project.contractAmount * project.contractExchangeRate;
+                    }
                     totalContractAmount += contractAmountTL;
 
+                    // Durum sayımları
                     statusCounts[project.status] = (statusCounts[project.status] || 0) + 1;
 
-                    // Harcamalar
+                    // Harcamaları topla
                     const expensesSnapshot = await db.collection('projects').doc(projectId).collection('expenses')
                         .where('date', '>=', startDateInput.value || '1900-01-01')
                         .where('date', '<=', endDateInput.value || '2100-12-31')
@@ -352,13 +331,14 @@
                         const amountTL = expense.amountTL || 0;
                         totalExpenses += amountTL;
 
+                        // Kategori bazında harcama ekle
                         project.categories.forEach(cat => {
                             if (!categoryData[cat]) categoryData[cat] = { projectCount: 0, totalContractAmount: 0, totalExpenses: 0, totalCollections: 0, balance: 0 };
                             categoryData[cat].totalExpenses += amountTL;
                         });
                     });
 
-                    // Tahsilatlar
+                    // Tahsilatları topla
                     const collectionsSnapshot = await db.collection('projects').doc(projectId).collection('collections')
                         .where('date', '>=', startDateInput.value || '1900-01-01')
                         .where('date', '<=', endDateInput.value || '2100-12-31')
@@ -368,13 +348,14 @@
                         const amountTL = collection.amountTL || 0;
                         totalCollections += amountTL;
 
+                        // Kategori bazında tahsilat ekle
                         project.categories.forEach(cat => {
                             if (!categoryData[cat]) categoryData[cat] = { projectCount: 0, totalContractAmount: 0, totalExpenses: 0, totalCollections: 0, balance: 0 };
                             categoryData[cat].totalCollections += amountTL;
                         });
                     });
 
-                    // Kategoriye proje ekle ve sözleşme bedeli ekle
+                    // Kategori bazında proje sayısı ekle
                     project.categories.forEach(cat => {
                         if (!categoryData[cat]) categoryData[cat] = { projectCount: 0, totalContractAmount: 0, totalExpenses: 0, totalCollections: 0, balance: 0 };
                         const projectCreatedAt = project.createdAt ? project.createdAt.toDate() : new Date(0);
@@ -387,7 +368,7 @@
 
                 filteredProjects = tempFilteredProjects;
 
-                // Genel Özet
+                // Genel Özet'i güncelle
                 totalProjectsSpan.textContent = filteredProjects.length;
                 totalContractAmountTLSpan.textContent = totalContractAmount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 totalExpensesTLSpan.textContent = totalExpenses.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
@@ -398,16 +379,18 @@
 
                 updateStatusChart(statusCounts);
                 displayCategoryAnalysis(categoryData);
-                displayDetailedProjects(filteredProjects);
+                displayDetailedProjects(filteredProjects); // Detaylı listeyi de güncelle
+                
                 showSystemMessage('Rapor başarıyla oluşturuldu.', false);
 
             } catch (error) {
-                console.error('Rapor hatası:', error);
-                showSystemMessage('Rapor oluşturulurken hata: ' + error.message, true);
+                console.error('Rapor oluşturulurken hata oluştu:', error);
+                showSystemMessage('Rapor oluşturulurken bir hata oluştu: ' + error.message, true);
                 resetReportData();
             }
         }
 
+        // Rapor verilerini sıfırla
         function resetReportData() {
             totalProjectsSpan.textContent = '0';
             totalContractAmountTLSpan.textContent = '0,00 ₺';
@@ -416,38 +399,67 @@
             overallBalanceTLSpan.textContent = '0,00 ₺';
             overallBalanceTLSpan.style.color = '';
 
-            if (statusChart) statusChart.destroy();
+            if (statusChart) {
+                statusChart.destroy();
+            }
             categoryAnalysisTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Rapor oluşturmak için tarihleri seçin.</td></tr>';
             detailedProjectListBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Detaylı proje listesi için raporu oluşturun.</td></tr>';
         }
 
+        // Durum Dağılımı Grafiği
         function updateStatusChart(statusCounts) {
             const labels = Object.keys(statusCounts);
             const data = Object.values(statusCounts);
 
             const backgroundColors = labels.map(status => {
                 switch (status) {
-                    case 'Başlamadı': return '#6c757d';
-                    case 'Devam Ediyor': return '#007bff';
-                    case 'Takip Ediliyor': return '#ffc107';
-                    case 'Tamamlandı': return '#28a745';
+                    case 'Başlamadı': return '#6c757d'; // Gri
+                    case 'Devam Ediyor': return '#007bff'; // Mavi
+                    case 'Takip Ediliyor': return '#ffc107'; // Sarı
+                    case 'Tamamlandı': return '#28a745'; // Yeşil
                     default: return '#cccccc';
                 }
             });
 
             const ctx = document.getElementById('statusChart').getContext('2d');
-            if (statusChart) statusChart.destroy();
+            if (statusChart) {
+                statusChart.destroy();
+            }
             statusChart = new Chart(ctx, {
                 type: 'doughnut',
-                data: { labels, datasets: [{ data, backgroundColor: backgroundColors, hoverOffset: 4 }] },
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: backgroundColors,
+                        hoverOffset: 4
+                    }]
+                },
                 options: {
                     responsive: true,
                     plugins: {
-                        legend: { position: 'top' },
-                        title: { display: true, text: 'Proje Durum Dağılımı', font: { size: 16 } },
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: 'Proje Durum Dağılımı',
+                            font: {
+                                size: 16
+                            }
+                        },
                         tooltip: {
                             callbacks: {
-                                label: context => `${context.label}: ${context.parsed} Proje`
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed !== null) {
+                                        label += context.parsed + ' Proje';
+                                    }
+                                    return label;
+                                }
                             }
                         }
                     }
@@ -455,29 +467,39 @@
             });
         }
 
+        // Kategori Analizi Tablosu
         function displayCategoryAnalysis(categoryData) {
             categoryAnalysisTableBody.innerHTML = '';
 
             if (Object.keys(categoryData).length === 0) {
-                categoryAnalysisTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: #666;">Veri bulunamadı.</td></tr>';
+                categoryAnalysisTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: #666;">Hiç kategori verisi bulunamadı.</td></tr>';
                 return;
             }
 
-            let sortedCategories = Object.keys(categoryData).map(cat => ({
-                category: cat,
-                projectCount: categoryData[cat].projectCount,
-                totalContractAmount: categoryData[cat].totalContractAmount,
-                totalExpenses: categoryData[cat].totalExpenses,
-                totalCollections: categoryData[cat].totalCollections,
-                balance: categoryData[cat].totalCollections - categoryData[cat].totalExpenses
-            }));
+            // Sırala
+            let sortedCategories = Object.keys(categoryData).map(categoryName => {
+                const data = categoryData[categoryName];
+                const balance = data.totalCollections - data.totalExpenses;
+                return {
+                    category: categoryName,
+                    projectCount: data.projectCount,
+                    totalContractAmount: data.totalContractAmount,
+                    totalExpenses: data.totalExpenses,
+                    totalCollections: data.totalCollections,
+                    balance: balance
+                };
+            });
 
             sortedCategories.sort((a, b) => {
-                let valA = a[currentCategorySortColumn], valB = b[currentCategorySortColumn];
+                let valA, valB;
                 if (currentCategorySortColumn === 'category') {
                     valA = a.category.toLowerCase();
                     valB = b.category.toLowerCase();
+                } else {
+                    valA = a[currentCategorySortColumn];
+                    valB = b[currentCategorySortColumn];
                 }
+
                 if (valA < valB) return currentCategorySortDirection === 'asc' ? -1 : 1;
                 if (valA > valB) return currentCategorySortDirection === 'asc' ? 1 : -1;
                 return 0;
@@ -485,30 +507,33 @@
 
             sortedCategories.forEach(data => {
                 const row = categoryAnalysisTableBody.insertRow();
-                const catCell = row.insertCell(0);
-                catCell.textContent = data.category;
-                catCell.classList.add('category-name');
-                catCell.dataset.category = data.category;
+                const categoryCell = row.insertCell(0);
+                categoryCell.textContent = data.category;
+                categoryCell.classList.add('category-name');
+                categoryCell.dataset.category = data.category;
 
                 row.insertCell(1).textContent = data.projectCount;
                 row.insertCell(2).textContent = data.totalContractAmount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 row.insertCell(3).textContent = data.totalExpenses.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 row.insertCell(4).textContent = data.totalCollections.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                const balCell = row.insertCell(5);
-                balCell.textContent = data.balance.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                balCell.style.color = data.balance >= 0 ? '#28a745' : '#dc3545';
-                balCell.style.fontWeight = '600';
-                balCell.style.textAlign = 'right';
+                const balanceCell = row.insertCell(5);
+                balanceCell.textContent = data.balance.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                balanceCell.style.color = data.balance >= 0 ? '#28a745' : '#dc3545';
+                balanceCell.style.fontWeight = '600';
+                balanceCell.style.textAlign = 'right';
             });
 
+            // Kategori adına tıklama
             categoryAnalysisTableBody.querySelectorAll('.category-name').forEach(cell => {
-                cell.addEventListener('click', e => {
-                    detailedFilterCategory.value = e.target.dataset.category;
+                cell.addEventListener('click', (e) => {
+                    const categoryToFilter = e.target.dataset.category;
+                    detailedFilterCategory.value = categoryToFilter;
                     displayDetailedProjects(filteredProjects);
                 });
             });
         }
 
+        // Kategori tablosu sıralama
         categoryTableHeader.querySelectorAll('.sortable').forEach(header => {
             header.addEventListener('click', () => {
                 const sortColumn = header.dataset.sort;
@@ -520,54 +545,80 @@
                     currentCategorySortColumn = sortColumn;
                     currentCategorySortDirection = 'asc';
                 }
-
+                
                 header.querySelector('.sort-icon').classList.add(currentCategorySortDirection);
                 displayCategoryAnalysis(Object.keys(categoryData).reduce((acc, key) => {
-                    const d = categoryData[key];
-                    acc[key] = { ...d, balance: d.totalCollections - d.totalExpenses };
+                    const data = categoryData[key];
+                    const balance = data.totalCollections - data.totalExpenses;
+                    acc[key] = { ...data, balance: balance };
                     return acc;
                 }, {}));
             });
         });
 
+        // Detaylı Proje Listesi
         function displayDetailedProjects(projectsToDisplay) {
             detailedProjectListBody.innerHTML = '';
-            let currentProjects = [...projectsToDisplay];
+            let currentDetailedProjects = [...projectsToDisplay];
 
             const statusFilter = detailedFilterStatus.value;
             const categoryFilter = detailedFilterCategory.value;
 
-            if (statusFilter) currentProjects = currentProjects.filter(p => p.status === statusFilter);
-            if (categoryFilter) currentProjects = currentProjects.filter(p => p.categories?.includes(categoryFilter));
+            if (statusFilter) {
+                currentDetailedProjects = currentDetailedProjects.filter(p => p.status === statusFilter);
+            }
+            if (categoryFilter) {
+                currentDetailedProjects = currentDetailedProjects.filter(p => p.categories && p.categories.includes(categoryFilter));
+            }
 
             const sortOption = detailedSortBy.value;
-            currentProjects.sort((a, b) => {
+            currentDetailedProjects.sort((a, b) => {
                 let valA, valB;
                 switch (sortOption) {
                     case 'projectName_asc':
-                        return (a.projectName || '').localeCompare(b.projectName || '');
+                        valA = a.projectName.toLowerCase();
+                        valB = b.projectName.toLowerCase();
+                        return valA.localeCompare(valB);
                     case 'projectName_desc':
-                        return (b.projectName || '').localeCompare(a.projectName || '');
+                        valA = a.projectName.toLowerCase();
+                        valB = b.projectName.toLowerCase();
+                        return valB.localeCompare(valA);
                     case 'contractAmountTL_asc':
-                        return (a.contractAmount || 0) - (b.contractAmount || 0);
+                        valA = a.contractAmount || 0;
+                        if (a.contractCurrency !== 'TRY' && a.contractExchangeRate) {
+                            valA = a.contractAmount * a.contractExchangeRate;
+                        }
+                        valB = b.contractAmount || 0;
+                        if (b.contractCurrency !== 'TRY' && b.contractExchangeRate) {
+                            valB = b.contractAmount * b.contractExchangeRate;
+                        }
+                        return valA - valB;
                     case 'contractAmountTL_desc':
-                        return (b.contractAmount || 0) - (a.contractAmount || 0);
+                        valA = a.contractAmount || 0;
+                        if (a.contractCurrency !== 'TRY' && a.contractExchangeRate) {
+                            valA = a.contractAmount * a.contractExchangeRate;
+                        }
+                        valB = b.contractAmount || 0;
+                        if (b.contractCurrency !== 'TRY' && b.contractExchangeRate) {
+                            valB = b.contractAmount * b.contractExchangeRate;
+                        }
+                        return valB - valA;
                     default:
                         return 0;
                 }
             });
 
-            if (currentProjects.length === 0) {
-                detailedProjectListBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: #666;">Filtreyle eşleşen proje yok.</td></tr>';
+            if (currentDetailedProjects.length === 0) {
+                detailedProjectListBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: #666;">Filtrelere uyan proje bulunamadı.</td></tr>';
                 return;
             }
 
-            currentProjects.forEach(async (project) => {
+            currentDetailedProjects.forEach(project => {
                 const row = detailedProjectListBody.insertRow();
                 row.insertCell(0).textContent = project.projectName;
                 row.insertCell(1).textContent = project.customerName;
                 row.insertCell(2).textContent = (project.categories && project.categories.length > 0) ? project.categories.join(', ') : 'Belirtilmemiş';
-
+                
                 const statusCell = row.insertCell(3);
                 const statusSpan = document.createElement('span');
                 statusSpan.textContent = project.status;
@@ -575,14 +626,12 @@
                 statusSpan.classList.add('status-' + project.status.toLowerCase().replace(/ /g, ''));
                 statusCell.appendChild(statusSpan);
 
-                // TL karşılığını hesapla ve göster
-                const contractAmountTL = await getContractAmountTL(
-                    project.contractAmount || 0,
-                    project.contractCurrency || 'TRY',
-                    project.contractDate
-                );
-                const amountCell = row.insertCell(4);
-                amountCell.textContent = contractAmountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                // Sözleşme bedelini TL'ye çevir
+                let contractAmountTL = project.contractAmount || 0;
+                if (project.contractCurrency !== 'TRY' && project.contractExchangeRate) {
+                    contractAmountTL = project.contractAmount * project.contractExchangeRate;
+                }
+                row.insertCell(4).textContent = contractAmountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
 
                 const actionsCell = row.insertCell(5);
                 actionsCell.classList.add('actions-cell');
