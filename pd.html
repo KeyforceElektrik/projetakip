@@ -352,74 +352,55 @@
             }, 5000);
         }
 
-        // TCMB'den kur çekme fonksiyonu (JSON Proxy - Düzeltilmiş)
-        async function fetchTCMBRates(dateString) {
+        // --- YENİLENEN KUR ÇEKME FONKSİYONU (Frankfurter API) ---
+        // Artık XML proxy sorunları yok, doğrudan JSON veri.
+        async function fetchCurrencyRates(dateString, currencyCode) {
             try {
+                if (currencyCode === 'TRY') return 1;
+
                 let dateObj = dateString ? new Date(dateString) : new Date();
                 
-                // Hafta sonu kontrolü
-                const day = dateObj.getDay();
-                if (day === 0) { // Pazar -> Cuma
-                    dateObj.setDate(dateObj.getDate() - 2);
-                } else if (day === 6) { // Cumartesi -> Cuma
-                    dateObj.setDate(dateObj.getDate() - 1);
+                // Gelecek tarih kontrolü
+                if (dateObj > new Date()) {
+                    showSystemMessage('Gelecek tarihli kur çekilemez. Bugünün kuru deneniyor.', true);
+                    dateObj = new Date();
                 }
 
-                const dd = String(dateObj.getDate()).padStart(2, '0');
-                const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+                // YYYY-MM-DD formatı
                 const yyyy = dateObj.getFullYear();
+                const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const dd = String(dateObj.getDate()).padStart(2, '0');
+                const formattedDate = `${yyyy}-${mm}-${dd}`;
                 
-                const tcmbUrl = `https://www.tcmb.gov.tr/kurlar/${yyyy}${mm}/${dd}${mm}${yyyy}.xml`;
+                // Frankfurter API URL (Ücretsiz, Proxy gerektirmez, Güvenli)
+                // USD -> TRY istiyorsak: from=USD&to=TRY
+                const apiUrl = `https://api.frankfurter.app/${formattedDate}?from=${currencyCode}&to=TRY`;
+
+                showSystemMessage('Kur bilgisi API üzerinden çekiliyor...', false);
+
+                const response = await fetch(apiUrl);
                 
-                // api.allorigins.win/get kullanarak JSON wrapper içinde veri çekiyoruz.
-                // Bu yöntem XML'i doğrudan çekmeye göre daha az hata verir (Header sorunları olmaz).
-                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(tcmbUrl)}`;
-
-                showSystemMessage('Kur bilgisi TCMB\'den çekiliyor...', false);
-
-                const response = await fetch(proxyUrl);
-                if (!response.ok) throw new Error('Proxy sunucusuna erişilemedi.');
+                if (!response.ok) {
+                    // Eğer hafta sonuysa veya tatilse API 404 dönebilir, o zaman en son iş gününü dene
+                    // Ancak Frankfurter genelde en yakın tarihi otomatik verir.
+                    throw new Error('Kur verisi alınamadı (Hafta sonu veya tatil olabilir).');
+                }
                 
                 const data = await response.json();
-                const xmlText = data.contents; // JSON içindeki "contents" asıl XML'i taşır.
-
-                if (!xmlText) {
-                    throw new Error('TCMB verisi boş döndü.');
-                }
                 
-                // XML Ayrıştırma
-                const parser = new DOMParser();
-                const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-
-                if (xmlDoc.getElementsByTagName("parsererror").length > 0 || xmlText.includes("<html")) {
-                     throw new Error('Kur verisi okunamadı (Tarih formatı veya tatil günü olabilir).');
+                if (data && data.rates && data.rates.TRY) {
+                    const rate = data.rates.TRY;
+                    console.log(`Güncel Kur (${currencyCode} -> TRY):`, rate);
+                    showSystemMessage('Kurlar güncellendi.', false);
+                    return rate;
+                } else {
+                    throw new Error('API yanıtında kur bulunamadı.');
                 }
-
-                const rates = {};
-                const currencies = xmlDoc.getElementsByTagName("Currency");
-                
-                for (let i = 0; i < currencies.length; i++) {
-                    const code = currencies[i].getAttribute("CurrencyCode");
-                    if (code === 'USD' || code === 'EUR' || code === 'GBP') {
-                        const value = currencies[i].getElementsByTagName("ForexSelling")[0]?.textContent;
-                        if (value) {
-                            rates[code] = parseFloat(value);
-                        }
-                    }
-                }
-
-                if (Object.keys(rates).length === 0) {
-                    throw new Error('Dosyada kur bilgisi bulunamadı.');
-                }
-
-                console.log("Kurlar başarıyla çekildi:", rates);
-                showSystemMessage('Kurlar güncellendi.', false);
-                return rates;
 
             } catch (error) {
                 console.error('Kur çekme hatası:', error);
-                showSystemMessage(`Kur çekilemedi (Manuel giriniz): ${error.message}`, true);
-                return {};
+                showSystemMessage(`Kur çekilemedi: ${error.message} (Lütfen manuel giriniz)`, true);
+                return null;
             }
         }
 
@@ -566,14 +547,9 @@
             } else {
                 expenseExchangeRateGroup.style.display = 'block';
                 if (expenseDate) {
-                    const rates = await fetchTCMBRates(expenseDate);
-                    if (rates && rates[selectedCurrency]) {
-                        const rate = rates[selectedCurrency];
-                        if (expenseExchangeRateInput.value == 1 || expenseExchangeRateInput.value == '') {
-                            expenseExchangeRateInput.value = rate.toFixed(4);
-                        }
-                    } else {
-                        showSystemMessage(`Seçilen tarih için ${selectedCurrency} kuru bulunamadı. Manuel girin.`, true);
+                    const rate = await fetchCurrencyRates(expenseDate, selectedCurrency);
+                    if (rate) {
+                        expenseExchangeRateInput.value = rate.toFixed(4);
                     }
                 } else {
                     showSystemMessage('Kur çekmek için tarih seçin veya manuel girin.', true);
@@ -586,15 +562,10 @@
             if (selectedCurrency !== 'TRY') {
                 const expenseDate = expenseDateInput.value;
                 if (expenseDate) {
-                    const rates = await fetchTCMBRates(expenseDate);
-                    if (rates && rates[selectedCurrency]) {
-                        const rate = rates[selectedCurrency];
-                        if (expenseExchangeRateInput.value == 1 || expenseExchangeRateInput.value == '') {
-                            expenseExchangeRateInput.value = rate.toFixed(4);
-                        }
-                    } else {
-                        showSystemMessage(`Seçilen tarih için ${selectedCurrency} kuru bulunamadı. Manuel girin.`, true);
-                    }
+                     const rate = await fetchCurrencyRates(expenseDate, selectedCurrency);
+                     if (rate) {
+                         expenseExchangeRateInput.value = rate.toFixed(4);
+                     }
                 }
             }
         });
@@ -680,14 +651,9 @@
             } else {
                 collectionExchangeRateGroup.style.display = 'block';
                 if (collectionDate) {
-                    const rates = await fetchTCMBRates(collectionDate);
-                    if (rates && rates[selectedCurrency]) {
-                        const rate = rates[selectedCurrency];
-                        if (collectionExchangeRateInput.value == 1 || collectionExchangeRateInput.value == '') {
-                            collectionExchangeRateInput.value = rate.toFixed(4);
-                        }
-                    } else {
-                        showSystemMessage(`Seçilen tarih için ${selectedCurrency} kuru bulunamadı. Manuel girin.`, true);
+                    const rate = await fetchCurrencyRates(collectionDate, selectedCurrency);
+                    if (rate) {
+                        collectionExchangeRateInput.value = rate.toFixed(4);
                     }
                 } else {
                     showSystemMessage('Kur çekmek için tarih seçin veya manuel girin.', true);
@@ -701,14 +667,9 @@
             if (selectedCurrency !== 'TRY' && selectedType !== 'Barter') {
                 const collectionDate = collectionDateInput.value;
                 if (collectionDate) {
-                    const rates = await fetchTCMBRates(collectionDate);
-                    if (rates && rates[selectedCurrency]) {
-                        const rate = rates[selectedCurrency];
-                        if (collectionExchangeRateInput.value == 1 || collectionExchangeRateInput.value == '') {
-                            collectionExchangeRateInput.value = rate.toFixed(4);
-                        }
-                    } else {
-                        showSystemMessage(`Seçilen tarih için ${selectedCurrency} kuru bulunamadı. Manuel girin.`, true);
+                    const rate = await fetchCurrencyRates(collectionDate, selectedCurrency);
+                    if (rate) {
+                        collectionExchangeRateInput.value = rate.toFixed(4);
                     }
                 }
             }
