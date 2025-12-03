@@ -352,10 +352,9 @@
             }, 5000);
         }
 
-       // TCMB'den kur çekme fonksiyonu (JSON Yöntemi - En Kararlısı)
+        // TCMB'den kur çekme fonksiyonu (JSON Proxy - Düzeltilmiş)
         async function fetchTCMBRates(dateString) {
             try {
-                // Tarih seçilmediyse bugünü al
                 let dateObj = dateString ? new Date(dateString) : new Date();
                 
                 // Hafta sonu kontrolü
@@ -370,11 +369,10 @@
                 const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
                 const yyyy = dateObj.getFullYear();
                 
-                // TCMB XML Linki
                 const tcmbUrl = `https://www.tcmb.gov.tr/kurlar/${yyyy}${mm}/${dd}${mm}${yyyy}.xml`;
                 
-                // API AllOrigins (JSON Modu - Raw DEĞİL)
-                // Bu yöntem XML'i bir metin olarak JSON içinde getirir, tarayıcı engeline takılmaz.
+                // api.allorigins.win/get kullanarak JSON wrapper içinde veri çekiyoruz.
+                // Bu yöntem XML'i doğrudan çekmeye göre daha az hata verir (Header sorunları olmaz).
                 const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(tcmbUrl)}`;
 
                 showSystemMessage('Kur bilgisi TCMB\'den çekiliyor...', false);
@@ -383,7 +381,7 @@
                 if (!response.ok) throw new Error('Proxy sunucusuna erişilemedi.');
                 
                 const data = await response.json();
-                const xmlText = data.contents; // XML içeriği buradadır
+                const xmlText = data.contents; // JSON içindeki "contents" asıl XML'i taşır.
 
                 if (!xmlText) {
                     throw new Error('TCMB verisi boş döndü.');
@@ -393,7 +391,6 @@
                 const parser = new DOMParser();
                 const xmlDoc = parser.parseFromString(xmlText, "text/xml");
 
-                // Hata kontrolü (TCMB bazen HTML hata sayfası döner)
                 if (xmlDoc.getElementsByTagName("parsererror").length > 0 || xmlText.includes("<html")) {
                      throw new Error('Kur verisi okunamadı (Tarih formatı veya tatil günü olabilir).');
                 }
@@ -416,18 +413,6 @@
                 }
 
                 console.log("Kurlar başarıyla çekildi:", rates);
-                showSystemMessage('Kurlar güncellendi.', false);
-                return rates;
-
-            } catch (error) {
-                console.error('Kur çekme hatası:', error);
-                showSystemMessage(`Kur çekilemedi (Manuel giriniz): Bağlantı hatası.`, true);
-                return {};
-            }
-        }
-                }
-
-                console.log("Kurlar:", rates);
                 showSystemMessage('Kurlar güncellendi.', false);
                 return rates;
 
