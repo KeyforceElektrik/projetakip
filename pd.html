@@ -352,16 +352,16 @@
             }, 5000);
         }
 
-        // TCMB'den kur çekme fonksiyonu (Client-Side Proxy ile)
+        // TCMB'den kur çekme fonksiyonu (Çift Proxy Korumalı)
         async function fetchTCMBRates(dateString) {
             try {
                 let dateObj = dateString ? new Date(dateString) : new Date();
                 
                 // Hafta sonu kontrolü
                 const day = dateObj.getDay();
-                if (day === 0) { // Pazar
+                if (day === 0) { // Pazar -> Cuma
                     dateObj.setDate(dateObj.getDate() - 2);
-                } else if (day === 6) { // Cumartesi
+                } else if (day === 6) { // Cumartesi -> Cuma
                     dateObj.setDate(dateObj.getDate() - 1);
                 }
 
@@ -369,16 +369,39 @@
                 const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
                 const yyyy = dateObj.getFullYear();
                 
+                // TCMB XML Linki
                 const tcmbUrl = `https://www.tcmb.gov.tr/kurlar/${yyyy}${mm}/${dd}${mm}${yyyy}.xml`;
-                // CORS hatasını aşmak için proxy kullanımı
-                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(tcmbUrl)}`;
+                
+                // İki farklı proxy servisi tanımlıyoruz (Biri çalışmazsa diğeri devreye girer)
+                const proxies = [
+                    `https://corsproxy.io/?${encodeURIComponent(tcmbUrl)}`, // 1. Tercih (Genelde daha hızlı)
+                    `https://api.allorigins.win/raw?url=${encodeURIComponent(tcmbUrl)}` // 2. Tercih (Yedek)
+                ];
 
                 showSystemMessage('Kur bilgisi TCMB\'den çekiliyor...', false);
 
-                const response = await fetch(proxyUrl);
-                if (!response.ok) throw new Error('Veri alınamadı.');
+                let xmlText = null;
+                let errorDetails = "";
+
+                // Sırayla proxy'leri dene
+                for (const proxyUrl of proxies) {
+                    try {
+                        const response = await fetch(proxyUrl);
+                        if (response.ok) {
+                            xmlText = await response.text();
+                            break; // Başarılı olduysa döngüden çık
+                        }
+                    } catch (err) {
+                        console.warn(`Proxy hatası (${proxyUrl}):`, err);
+                        errorDetails += err.message + " ";
+                    }
+                }
+
+                if (!xmlText) {
+                    throw new Error('Tüm kaynaklara erişim denendi ancak başarısız olundu.');
+                }
                 
-                const xmlText = await response.text();
+                // XML Ayrıştırma
                 const parser = new DOMParser();
                 const xmlDoc = parser.parseFromString(xmlText, "text/xml");
 
@@ -395,6 +418,21 @@
                     }
                 }
 
+                // Eğer XML geldi ama içinde kur yoksa (Resmi tatil vs.)
+                if (Object.keys(rates).length === 0) {
+                    throw new Error('Tarih resmi tatil olabilir veya veri boş.');
+                }
+
+                console.log("Kurlar başarıyla çekildi:", rates);
+                showSystemMessage('Kurlar güncellendi.', false);
+                return rates;
+
+            } catch (error) {
+                console.error('Kur çekme hatası:', error);
+                showSystemMessage(`Kur otomatik çekilemedi (Lütfen manuel giriniz): Bağlantı hatası.`, true);
+                return {};
+            }
+        }
                 console.log("Kurlar:", rates);
                 showSystemMessage('Kurlar güncellendi.', false);
                 return rates;
