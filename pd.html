@@ -352,16 +352,17 @@
             }, 5000);
         }
 
-        // TCMB'den kur çekme fonksiyonu (Çift Proxy Korumalı ve Hata Düzeltilmiş)
+       // TCMB'den kur çekme fonksiyonu (JSON Yöntemi - En Kararlısı)
         async function fetchTCMBRates(dateString) {
             try {
+                // Tarih seçilmediyse bugünü al
                 let dateObj = dateString ? new Date(dateString) : new Date();
                 
                 // Hafta sonu kontrolü
                 const day = dateObj.getDay();
-                if (day === 0) { // Pazar
+                if (day === 0) { // Pazar -> Cuma
                     dateObj.setDate(dateObj.getDate() - 2);
-                } else if (day === 6) { // Cumartesi
+                } else if (day === 6) { // Cumartesi -> Cuma
                     dateObj.setDate(dateObj.getDate() - 1);
                 }
 
@@ -369,33 +370,33 @@
                 const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
                 const yyyy = dateObj.getFullYear();
                 
+                // TCMB XML Linki
                 const tcmbUrl = `https://www.tcmb.gov.tr/kurlar/${yyyy}${mm}/${dd}${mm}${yyyy}.xml`;
                 
-                // İki farklı proxy servisi
-                const proxies = [
-                    `https://corsproxy.io/?${encodeURIComponent(tcmbUrl)}`, 
-                    `https://api.allorigins.win/raw?url=${encodeURIComponent(tcmbUrl)}`
-                ];
+                // API AllOrigins (JSON Modu - Raw DEĞİL)
+                // Bu yöntem XML'i bir metin olarak JSON içinde getirir, tarayıcı engeline takılmaz.
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(tcmbUrl)}`;
 
                 showSystemMessage('Kur bilgisi TCMB\'den çekiliyor...', false);
 
-                let xmlText = null;
-                for (const proxyUrl of proxies) {
-                    try {
-                        const response = await fetch(proxyUrl);
-                        if (response.ok) {
-                            xmlText = await response.text();
-                            break; 
-                        }
-                    } catch (err) {
-                        console.warn(`Proxy hatası (${proxyUrl}):`, err);
-                    }
-                }
-
-                if (!xmlText) throw new Error('Proxy servislerine erişilemedi.');
+                const response = await fetch(proxyUrl);
+                if (!response.ok) throw new Error('Proxy sunucusuna erişilemedi.');
                 
+                const data = await response.json();
+                const xmlText = data.contents; // XML içeriği buradadır
+
+                if (!xmlText) {
+                    throw new Error('TCMB verisi boş döndü.');
+                }
+                
+                // XML Ayrıştırma
                 const parser = new DOMParser();
                 const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+
+                // Hata kontrolü (TCMB bazen HTML hata sayfası döner)
+                if (xmlDoc.getElementsByTagName("parsererror").length > 0 || xmlText.includes("<html")) {
+                     throw new Error('Kur verisi okunamadı (Tarih formatı veya tatil günü olabilir).');
+                }
 
                 const rates = {};
                 const currencies = xmlDoc.getElementsByTagName("Currency");
@@ -408,6 +409,22 @@
                             rates[code] = parseFloat(value);
                         }
                     }
+                }
+
+                if (Object.keys(rates).length === 0) {
+                    throw new Error('Dosyada kur bilgisi bulunamadı.');
+                }
+
+                console.log("Kurlar başarıyla çekildi:", rates);
+                showSystemMessage('Kurlar güncellendi.', false);
+                return rates;
+
+            } catch (error) {
+                console.error('Kur çekme hatası:', error);
+                showSystemMessage(`Kur çekilemedi (Manuel giriniz): Bağlantı hatası.`, true);
+                return {};
+            }
+        }
                 }
 
                 console.log("Kurlar:", rates);
