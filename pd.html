@@ -882,6 +882,42 @@
             checkDetailsDiv.style.display = 'none';
             barterDetailsDiv.style.display = 'none';
         });
+        // --- EKLENECEK KOD BAŞLANGICI ---
+        // Proje Güncelleme Formu için Otomatik Kur Çekme Tetikleyicileri
+
+        // 1. Para birimi değişince kur çek
+        updateContractCurrencySelect.addEventListener('change', async () => {
+            const selectedCurrency = updateContractCurrencySelect.value;
+            const selectedDate = updateContractDateInput.value;
+
+            if (selectedCurrency === 'TRY') {
+                updateContractExchangeRateInput.value = '1';
+                // TRY ise kur alanını pasif yapabiliriz veya 1'de bırakabiliriz
+            } else {
+                if (selectedDate) {
+                    const rate = await fetchCurrencyRates(selectedDate, selectedCurrency);
+                    if (rate) {
+                        updateContractExchangeRateInput.value = rate.toFixed(4);
+                    }
+                } else {
+                    showSystemMessage('Kur çekmek için lütfen tarih seçin.', true);
+                }
+            }
+        });
+
+        // 2. Tarih değişince kur çek
+        updateContractDateInput.addEventListener('change', async () => {
+            const selectedCurrency = updateContractCurrencySelect.value;
+            const selectedDate = updateContractDateInput.value;
+
+            if (selectedCurrency !== 'TRY' && selectedDate) {
+                const rate = await fetchCurrencyRates(selectedDate, selectedCurrency);
+                if (rate) {
+                    updateContractExchangeRateInput.value = rate.toFixed(4);
+                }
+            }
+        });
+        // --- EKLENECEK KOD SONU ---
     </script>
 </body>
 </html>
