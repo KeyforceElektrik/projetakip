@@ -352,8 +352,9 @@
             }, 5000);
         }
 
-        // --- YENİLENEN KUR ÇEKME FONKSİYONU (Frankfurter API) ---
-        // Artık XML proxy sorunları yok, doğrudan JSON veri.
+        // --- YENİLENEN KUR ÇEKME FONKSİYONU (CDN / Statik JSON Yöntemi) ---
+        // Bu yöntem bir API sunucusu kullanmaz, doğrudan CDN üzerinden JSON dosyasını okur.
+        // CORS hatası verme ihtimali YOKTUR.
         async function fetchCurrencyRates(dateString, currencyCode) {
             try {
                 if (currencyCode === 'TRY') return 1;
@@ -362,7 +363,7 @@
                 
                 // Gelecek tarih kontrolü
                 if (dateObj > new Date()) {
-                    showSystemMessage('Gelecek tarihli kur çekilemez. Bugünün kuru deneniyor.', true);
+                    showSystemMessage('Gelecek tarihli kur çekilemez. Bugüne dönülüyor.', true);
                     dateObj = new Date();
                 }
 
@@ -372,29 +373,39 @@
                 const dd = String(dateObj.getDate()).padStart(2, '0');
                 const formattedDate = `${yyyy}-${mm}-${dd}`;
                 
-                // Frankfurter API URL (Ücretsiz, Proxy gerektirmez, Güvenli)
-                // USD -> TRY istiyorsak: from=USD&to=TRY
-                const apiUrl = `https://api.frankfurter.app/${formattedDate}?from=${currencyCode}&to=TRY`;
+                // Kaynak Para Birimi (Küçük harf gerekli)
+                const fromCurrency = currencyCode.toLowerCase();
 
-                showSystemMessage('Kur bilgisi API üzerinden çekiliyor...', false);
+                // 1. YÖNTEM: Seçilen tarihteki dosyayı çek
+                // URL: https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@{date}/v1/currencies/{currency}.json
+                let apiUrl = `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${formattedDate}/v1/currencies/${fromCurrency}.json`;
 
-                const response = await fetch(apiUrl);
+                showSystemMessage('Kur bilgisi CDN üzerinden çekiliyor...', false);
+
+                let response = await fetch(apiUrl);
+                
+                // Eğer seçilen tarihin dosyası henüz oluşmadıysa (örn: bugün sabahın erken saatleri)
+                // "latest" (en son güncel) versiyona fallback yap
+                if (!response.ok) {
+                    console.warn("Seçilen tarih için dosya bulunamadı, en güncel kur çekiliyor...");
+                    apiUrl = `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${fromCurrency}.json`;
+                    response = await fetch(apiUrl);
+                }
                 
                 if (!response.ok) {
-                    // Eğer hafta sonuysa veya tatilse API 404 dönebilir, o zaman en son iş gününü dene
-                    // Ancak Frankfurter genelde en yakın tarihi otomatik verir.
-                    throw new Error('Kur verisi alınamadı (Hafta sonu veya tatil olabilir).');
+                    throw new Error('Kur verisi sunucuda bulunamadı.');
                 }
                 
                 const data = await response.json();
                 
-                if (data && data.rates && data.rates.TRY) {
-                    const rate = data.rates.TRY;
+                // JSON yapısı: { "date": "...", "usd": { "try": 34.12, ... } }
+                if (data && data[fromCurrency] && data[fromCurrency].try) {
+                    const rate = data[fromCurrency].try;
                     console.log(`Güncel Kur (${currencyCode} -> TRY):`, rate);
                     showSystemMessage('Kurlar güncellendi.', false);
                     return rate;
                 } else {
-                    throw new Error('API yanıtında kur bulunamadı.');
+                    throw new Error('API yanıtında TRY karşılığı bulunamadı.');
                 }
 
             } catch (error) {
