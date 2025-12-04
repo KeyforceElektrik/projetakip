@@ -419,7 +419,7 @@
                 const rows = await Promise.all(promises);
                 detailedProjectListBody.innerHTML = rows.join('');
 
-                // 3. Özet Kartları Güncelle
+                // 3. Özet Kartlarını Güncelle
                 const totalExp = grandTotalStats.expResmi + grandTotalStats.expGayri;
                 const totalCol = grandTotalStats.colResmi + grandTotalStats.colGayri;
                 const netResmiVal = grandTotalStats.colResmi - grandTotalStats.expResmi;
