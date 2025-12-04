@@ -32,13 +32,13 @@
             color: #555;
             border-bottom: 2px solid #eee;
             padding-bottom: 10px;
-            margin-bottom: 15px;
+            margin-bottom: 5px;
         }
         .cash-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
             font-size: 0.95em;
         }
         .cash-row.total {
@@ -46,40 +46,40 @@
             padding-top: 10px;
             margin-top: 10px;
             font-weight: 700;
-            font-size: 1.1em;
+            font-size: 1.2em;
+            display: flex;
+            flex-direction: column; /* Alt alta USD göstermek için */
+            align-items: flex-end;
         }
         .badge-resmi {
-            background-color: #e3f2fd;
-            color: #0d47a1;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 0.85em;
+            background-color: #e3f2fd; color: #0d47a1;
+            padding: 2px 8px; border-radius: 4px; font-size: 0.85em;
         }
         .badge-gayri {
-            background-color: #fff3e0;
-            color: #e65100;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 0.85em;
+            background-color: #fff3e0; color: #e65100;
+            padding: 2px 8px; border-radius: 4px; font-size: 0.85em;
         }
         .val-positive { color: #28a745; }
         .val-negative { color: #dc3545; }
         
-        /* Yükleniyor animasyonu */
+        /* USD Gösterimi */
+        .usd-equivalent-total {
+            font-size: 0.65em;
+            color: #28a745;
+            font-weight: 500;
+            margin-top: 2px;
+        }
+
+        /* Yükleniyor */
         .loading-overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(255,255,255,0.8);
             display: flex; justify-content: center; align-items: center;
-            z-index: 1000;
-            display: none;
+            z-index: 1000; display: none;
         }
         .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
-            border-radius: 50%;
-            width: 40px; height: 40px;
-            animation: spin 1s linear infinite;
+            border: 4px solid #f3f3f3; border-top: 4px solid #3498db;
+            border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
@@ -116,7 +116,6 @@
         </div>
 
         <h2 class="section-title">Nakit Akış Özeti (Gerçekleşen)</h2>
-        <p style="color:#666; margin-bottom:20px;">Aşağıdaki veriler, seçilen tarih aralığında oluşturulan projelerin <strong>bugüne kadar yapılmış</strong> tüm harcama ve tahsilatlarını içerir.</p>
         
         <div class="cash-flow-grid">
             <div class="cash-card">
@@ -130,8 +129,8 @@
                     <span id="sumExpGayri">0,00 ₺</span>
                 </div>
                 <div class="cash-row total" style="color: #dc3545;">
-                    <span>TOPLAM ÇIKIŞ</span>
                     <span id="sumExpTotal">0,00 ₺</span>
+                    <span id="sumExpUSD" class="usd-equivalent-total"></span>
                 </div>
             </div>
 
@@ -146,24 +145,24 @@
                     <span id="sumColGayri">0,00 ₺</span>
                 </div>
                 <div class="cash-row total" style="color: #28a745;">
-                    <span>TOPLAM GİRİŞ</span>
                     <span id="sumColTotal">0,00 ₺</span>
+                    <span id="sumColUSD" class="usd-equivalent-total"></span>
                 </div>
             </div>
 
             <div class="cash-card">
                 <h3>📊 Net Kasa Durumu</h3>
                 <div class="cash-row">
-                    <span>Resmi Kasa Dengesi:</span>
+                    <span>Resmi Kasa:</span>
                     <span id="netResmi">0,00 ₺</span>
                 </div>
                 <div class="cash-row">
-                    <span>Şahsi Kasa Dengesi:</span>
+                    <span>Şahsi Kasa:</span>
                     <span id="netGayri">0,00 ₺</span>
                 </div>
                 <div class="cash-row total">
-                    <span>GENEL NET</span>
                     <span id="netTotal">0,00 ₺</span>
+                    <span id="netTotalUSD" class="usd-equivalent-total"></span>
                 </div>
             </div>
         </div>
@@ -176,8 +175,7 @@
                         <th>Proje Adı</th>
                         <th>Müşteri</th>
                         <th>Kategoriler</th>
-                        <th>Sözleşme (TL)</th>
-                        <th>Top. Tahsilat</th>
+                        <th>Sözleşme Bedeli</th> <th>Top. Tahsilat</th>
                         <th>Top. Harcama</th>
                         <th>Net Durum</th>
                         <th>İşlemler</th>
@@ -223,14 +221,17 @@
         const sumExpResmi = document.getElementById('sumExpResmi');
         const sumExpGayri = document.getElementById('sumExpGayri');
         const sumExpTotal = document.getElementById('sumExpTotal');
+        const sumExpUSD = document.getElementById('sumExpUSD');
         
         const sumColResmi = document.getElementById('sumColResmi');
         const sumColGayri = document.getElementById('sumColGayri');
         const sumColTotal = document.getElementById('sumColTotal');
+        const sumColUSD = document.getElementById('sumColUSD');
 
         const netResmi = document.getElementById('netResmi');
         const netGayri = document.getElementById('netGayri');
         const netTotal = document.getElementById('netTotal');
+        const netTotalUSD = document.getElementById('netTotalUSD');
 
         const detailedProjectListBody = document.getElementById('detailedProjectListBody');
 
@@ -277,6 +278,34 @@
             loadingOverlay.style.display = show ? 'flex' : 'none';
         }
 
+        // CDN Kur Çekme (Sadece USD kuru için - Rapor özeti)
+        async function getTodayUSDRate() {
+            try {
+                const today = new Date();
+                const yyyy = today.getFullYear();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+                const formattedDate = `${yyyy}-${mm}-${dd}`;
+
+                // Önce bugünün dosyasını dene
+                let apiUrl = `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${formattedDate}/v1/currencies/usd.json`;
+                let response = await fetch(apiUrl);
+
+                // Olmazsa en sonuncuyu dene
+                if (!response.ok) {
+                    apiUrl = `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json`;
+                    response = await fetch(apiUrl);
+                }
+
+                if (!response.ok) return null;
+                const data = await response.json();
+                return data?.usd?.try || null;
+            } catch (e) {
+                console.error("Kur çekme hatası:", e);
+                return null;
+            }
+        }
+
         generateReportButton.addEventListener('click', generateReport);
 
         async function generateReport() {
@@ -296,12 +325,9 @@
             try {
                 // 1. Filtreye uyan projeleri çek
                 let query = db.collection('projects').where('ownerId', '==', currentUserId);
-                
-                // Client-side filtering for dates to keep indexes simple
                 const snapshot = await query.get();
                 const projects = [];
 
-                // Tarih filtresini uygula
                 snapshot.forEach(doc => {
                     const data = doc.data();
                     const createdAt = data.createdAt ? data.createdAt.toDate() : null;
@@ -309,7 +335,6 @@
                     let include = true;
                     if (createdAt) {
                         if (startDate && createdAt < startDate) include = false;
-                        // Bitiş tarihinin gün sonuna kadar alması için (endDate + 1 gün gibi davranmalı veya saat karşılaştırmalı)
                         const endDay = new Date(endDate);
                         endDay.setHours(23,59,59);
                         if (endDate && createdAt > endDay) include = false;
@@ -326,61 +351,61 @@
                     return;
                 }
 
-                // 2. Her projenin altındaki harcama ve tahsilatları çek (Parallel Requests)
-                // Dikkat: Çok fazla proje varsa bu işlem okuma kotasını etkiler.
+                // 2. Verileri topla
                 let grandTotalStats = {
                     expResmi: 0, expGayri: 0,
                     colResmi: 0, colGayri: 0
                 };
 
-                // Tabloyu doldurmak için HTML string
-                let tableRowsHTML = '';
-
-                // Projeler üzerinde dön
                 const promises = projects.map(async (project) => {
-                    // Harcamaları çek
+                    // Harcamalar
                     const expSnap = await db.collection('projects').doc(project.id).collection('expenses').get();
-                    let pExp = 0; // Proje Toplam Gider
-                    
+                    let pExp = 0;
                     expSnap.forEach(doc => {
                         const d = doc.data();
                         const val = d.amountTL || 0;
                         pExp += val;
-                        
                         if (d.recordType === 'Gayri Resmi') grandTotalStats.expGayri += val;
                         else grandTotalStats.expResmi += val;
                     });
 
-                    // Tahsilatları çek
+                    // Tahsilatlar
                     const colSnap = await db.collection('projects').doc(project.id).collection('collections').get();
-                    let pCol = 0; // Proje Toplam Gelir
-
+                    let pCol = 0;
                     colSnap.forEach(doc => {
                         const d = doc.data();
                         const val = d.amountTL || 0;
                         pCol += val;
-
                         if (d.recordType === 'Gayri Resmi') grandTotalStats.colGayri += val;
                         else grandTotalStats.colResmi += val;
                     });
 
-                    // Sözleşme Bedeli Hesapla
-                    let contractTL = project.contractAmount || 0;
-                    if (project.contractCurrency !== 'TRY' && project.contractExchangeRate) {
-                        contractTL = project.contractAmount * project.contractExchangeRate;
+                    // Sözleşme Bedeli (Orijinal + TL)
+                    const amount = project.contractAmount || 0;
+                    const currency = project.contractCurrency || 'TRY';
+                    let amountTL = amount;
+                    if (currency !== 'TRY' && project.contractExchangeRate) {
+                        amountTL = amount * project.contractExchangeRate;
                     }
 
-                    // Projenin Net Durumu
+                    // Gösterim: 10.000 USD <br> (340.000 TL)
+                    const fmtOriginal = amount.toLocaleString('tr-TR', { style: 'currency', currency: currency });
+                    const fmtTL = amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                    
+                    let contractCell = fmtOriginal;
+                    if (currency !== 'TRY') {
+                        contractCell += `<br><small style="color:#666;">(${fmtTL})</small>`;
+                    }
+
                     const pNet = pCol - pExp;
                     const netColor = pNet >= 0 ? '#28a745' : '#dc3545';
 
-                    // Satırı oluştur (Sıralama yapmadık, olduğu gibi ekliyoruz)
                     return `
                         <tr>
                             <td><strong>${project.projectName}</strong></td>
                             <td>${project.customerName}</td>
                             <td>${(project.categories || []).join(', ')}</td>
-                            <td style="text-align:right;">${contractTL.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})}</td>
+                            <td style="text-align:right;">${contractCell}</td>
                             <td style="text-align:right; color:#28a745;">${pCol.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})}</td>
                             <td style="text-align:right; color:#dc3545;">${pExp.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})}</td>
                             <td style="text-align:right; font-weight:bold; color:${netColor};">${pNet.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})}</td>
@@ -391,18 +416,17 @@
                     `;
                 });
 
-                // Tüm verilerin çekilmesini bekle
                 const rows = await Promise.all(promises);
                 detailedProjectListBody.innerHTML = rows.join('');
 
-                // 3. Özet Kartlarını Güncelle
+                // 3. Özet Kartları Güncelle
                 const totalExp = grandTotalStats.expResmi + grandTotalStats.expGayri;
                 const totalCol = grandTotalStats.colResmi + grandTotalStats.colGayri;
                 const netResmiVal = grandTotalStats.colResmi - grandTotalStats.expResmi;
                 const netGayriVal = grandTotalStats.colGayri - grandTotalStats.expGayri;
                 const netTotalVal = totalCol - totalExp;
 
-                // DOM güncelleme
+                // TL Değerlerini Yaz
                 sumExpResmi.textContent = grandTotalStats.expResmi.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
                 sumExpGayri.textContent = grandTotalStats.expGayri.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
                 sumExpTotal.textContent = totalExp.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
@@ -420,11 +444,20 @@
                 netTotal.textContent = netTotalVal.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
                 netTotal.className = netTotalVal >= 0 ? 'val-positive' : 'val-negative';
 
+                // --- USD Çevrimi (Bugünün Kuruyla) ---
+                const usdRate = await getTodayUSDRate();
+                if (usdRate) {
+                    const toUSD = (tl) => (tl / usdRate).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+                    sumExpUSD.textContent = `(~${toUSD(totalExp)})`;
+                    sumColUSD.textContent = `(~${toUSD(totalCol)})`;
+                    netTotalUSD.textContent = `(~${toUSD(netTotalVal)})`;
+                }
+
                 showSystemMessage('Rapor güncellendi.', false);
 
             } catch (error) {
                 console.error('Rapor hatası:', error);
-                showSystemMessage('Rapor oluşturulurken hata: ' + error.message, true);
+                showSystemMessage('Rapor hatası: ' + error.message, true);
             } finally {
                 toggleLoading(false);
             }
@@ -434,14 +467,17 @@
             sumExpResmi.textContent = '0,00 ₺';
             sumExpGayri.textContent = '0,00 ₺';
             sumExpTotal.textContent = '0,00 ₺';
+            sumExpUSD.textContent = '';
             
             sumColResmi.textContent = '0,00 ₺';
             sumColGayri.textContent = '0,00 ₺';
             sumColTotal.textContent = '0,00 ₺';
+            sumColUSD.textContent = '';
 
             netResmi.textContent = '0,00 ₺';
             netGayri.textContent = '0,00 ₺';
             netTotal.textContent = '0,00 ₺';
+            netTotalUSD.textContent = '';
             
             detailedProjectListBody.innerHTML = '';
         }
