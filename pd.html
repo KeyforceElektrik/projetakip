@@ -129,7 +129,7 @@
             <button class="tab-button active" data-tab="expenses">Harcamalar</button>
             <button class="tab-button" data-tab="collections">Tahsilatlar</button>
             <button class="tab-button" data-tab="summary">Özet</button>
-            <button class="tab-button" data-tab="simulation" style="color: #6f42c1;">🚀 Yatırım Simülasyonu</button>
+            <button class="tab-button" data-tab="simulation" style="color: #6f42c1;">🚀 Kar Yatırım Analizi</button>
         </div>
 
         <div id="expenses" class="tab-content active">
@@ -296,7 +296,7 @@
                     </div>
                 </div>
                 <div class="summary-card">
-                    <h4>Kalan Bakiye (TL)</h4>
+                    <h4>Kalan Bakiye (Net Kar)</h4>
                     <p id="remainingBalanceTL" class="summary-value"></p>
                 </div>
             </div>
@@ -307,8 +307,10 @@
         </div>
 
         <div id="simulation" class="tab-content">
-            <h3 class="section-subtitle" style="color: #6f42c1;">🚀 "Ya Şunu Alsaydım?" Analizi</h3>
-            <p style="color:#666;">Sözleşme tarihinde, sözleşme bedeli ile aşağıdaki varlıklardan alsaydınız bugün ne kadarınız olurdu?</p>
+            <h3 class="section-subtitle" style="color: #6f42c1;">🚀 Kar Yatırım Analizi</h3>
+            <p id="simDescription" style="color:#666;">
+                Bu analiz, projenin şu anki <strong>Net Karı</strong> (TL) ile sözleşme tarihinde yatırım yapılsaydı ne olurdu senaryosunu işler.
+            </p>
             <p style="font-size: 0.9em; color: #888;">*Altın (XAU) ve Gümüş (XAG) Ons fiyatları kullanılmıştır.</p>
             
             <div id="simContainer" class="sim-grid">
@@ -338,8 +340,10 @@
         let currentProjectId = null;
         let currentUserId = null;
         let balanceChart = null;
+        
+        // Simülasyon için global değişkenler
         let contractDateForSim = null;
-        let contractAmountUSDForSim = 0;
+        let contractAmountUSDForSim = 0; // Bu artık "Sözleşme Bedeli" değil, "Net Kar USD Karşılığı" olacak
 
         // Elements
         const userEmailSpan = document.getElementById('userEmail');
@@ -366,7 +370,6 @@
         const tabButtons = document.querySelectorAll('.tab-button');
         const tabContents = document.querySelectorAll('.tab-content');
         
-        // Expense & Collection Elements (Same as before)
         const addExpenseForm = document.getElementById('addExpenseForm');
         const expenseListBody = document.getElementById('expenseListBody');
         const expenseCurrencySelect = document.getElementById('expenseCurrency');
@@ -393,6 +396,7 @@
         const totalCollectionsGayri = document.getElementById('totalCollectionsGayri');
 
         const simContainer = document.getElementById('simContainer');
+        const simDescription = document.getElementById('simDescription');
 
         auth.onAuthStateChanged(user => {
             if (user) {
@@ -429,7 +433,7 @@
 
         function toggleLoading(show) { loadingOverlay.style.display = show ? 'flex' : 'none'; }
 
-        // --- KUR FONKSİYONU (CDN - KESİN ÇÖZÜM) ---
+        // --- KUR FONKSİYONU (CDN) ---
         async function fetchCurrencyRates(dateString, currencyCode) {
             try {
                 if (currencyCode === 'TRY') return 1;
@@ -461,24 +465,26 @@
             }
         }
 
-        // --- SİMÜLASYON HESAPLAMA (CDN Tabanlı - Çökmez) ---
+        // --- SİMÜLASYON HESAPLAMA (CDN Tabanlı - Net Kar Üzerinden) ---
         async function runFantasySimulation() {
-            if (!contractDateForSim || !contractAmountUSDForSim || contractAmountUSDForSim <= 0) {
-                simContainer.innerHTML = '<div style="text-align:center; padding:20px; color:#dc3545;">Simülasyon için geçerli bir Sözleşme Tarihi ve Bedeli gereklidir.</div>';
+            // Kontroller
+            if (!contractDateForSim) {
+                simContainer.innerHTML = '<div style="text-align:center; padding:20px; color:#dc3545;">Lütfen önce proje sözleşme tarihini giriniz.</div>';
+                return;
+            }
+            if (!contractAmountUSDForSim || contractAmountUSDForSim <= 0) {
+                simContainer.innerHTML = '<div style="text-align:center; padding:20px; color:#dc3545;">Projede henüz "Net Kar" oluşmadığı için (veya zarar olduğu için) yatırım simülasyonu yapılamaz.</div>';
                 return;
             }
 
             simContainer.innerHTML = '<div style="text-align:center; padding:20px;">Geçmiş ve güncel piyasa verileri taranıyor...</div>';
             
-            // Tarih Formatı (CDN için): YYYY-MM-DD
             const d = contractDateForSim;
             const yyyy = d.getFullYear();
             const mm = String(d.getMonth() + 1).padStart(2, '0');
             const dd = String(d.getDate()).padStart(2, '0');
             const oldDateStr = `${yyyy}-${mm}-${dd}`;
 
-            // Varlık Listesi (API Kodlarıyla)
-            // xau = Altın (Ons), xag = Gümüş (Ons)
             const assets = [
                 { id: 'btc', name: 'Bitcoin (BTC)', icon: 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png' },
                 { id: 'eth', name: 'Ethereum (ETH)', icon: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png' },
@@ -487,41 +493,36 @@
             ];
 
             try {
-                // 1. ESKİ Verileri Çek (Sözleşme Tarihi)
+                // 1. ESKİ Veriler
                 let oldApiUrl = `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${oldDateStr}/v1/currencies/usd.json`;
                 let oldRes = await fetch(oldApiUrl);
-                if (!oldRes.ok) {
-                    throw new Error('Sözleşme tarihine ait piyasa verisi bulunamadı.');
-                }
+                if (!oldRes.ok) throw new Error('Sözleşme tarihine ait piyasa verisi bulunamadı.');
                 const oldData = await oldRes.json();
 
-                // 2. YENİ Verileri Çek (Bugün - Latest)
+                // 2. YENİ Veriler
                 let newApiUrl = `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json`;
                 let newRes = await fetch(newApiUrl);
                 if (!newRes.ok) throw new Error('Güncel piyasa verilerine ulaşılamadı.');
                 const newData = await newRes.json();
 
-                // 3. Hesapla ve Göster
+                // 3. Hesapla
                 let htmlContent = '';
 
                 assets.forEach(asset => {
-                    // API bize "1 USD = X Coin" veriyor.
-                    // Dolayısıyla "1 Coin Kaç USD" bulmak için (1 / Rate) yapmalıyız.
                     const oldRate = oldData.usd[asset.id];
                     const newRate = newData.usd[asset.id];
 
                     if (oldRate && newRate) {
-                        // Fiyatları Hesapla (Tersine çevir)
                         const oldPrice = 1 / oldRate;
                         const newPrice = 1 / newRate;
 
-                        // Adet Hesabı: (Sözleşme USD Tutarı) / (O Günkü Fiyat)
+                        // Adet = (Net Kar USD) / (O Günkü Fiyat)
                         const quantity = contractAmountUSDForSim / oldPrice;
                         
-                        // Şimdiki Değer: (Adet) * (Şimdiki Fiyat)
+                        // Şimdiki Değer
                         const currentValue = quantity * newPrice;
                         
-                        // Kar/Zarar
+                        // Fark
                         const profit = currentValue - contractAmountUSDForSim;
                         const profitClass = profit >= 0 ? 'profit-plus' : 'profit-minus';
                         const profitSign = profit >= 0 ? '+' : '';
@@ -580,57 +581,31 @@
                     projectSummaryStatus.textContent = project.status;
                     projectSummaryStatus.className = 'status-badge status-' + project.status.toLowerCase().replace(/ /g, '');
 
-                    // Sözleşme Bedeli ve Simülasyon Hazırlığı
                     let contractDisplay = '';
                     const amount = project.contractAmount || 0;
                     const currency = project.contractCurrency || 'TRY';
                     let amountTL = amount;
-                    let amountUSD = 0; // Simülasyon için
 
-                    // Exchange Rate logic
                     const rate = project.contractExchangeRate || 1;
 
-                    if (currency === 'USD') {
-                        amountUSD = amount;
-                        amountTL = amount * rate;
-                    } else if (currency === 'EUR') {
-                        amountTL = amount * rate; 
-                        amountUSD = amountTL / 34; // Varsayılan, aşağıda güncellenecek.
-                    } else { // TRY
-                        amountTL = amount;
-                        amountUSD = amountTL / 34; // Varsayılan.
-                    }
+                    if (currency === 'USD') amountTL = amount * rate;
+                    else if (currency === 'EUR') amountTL = amount * rate; 
+                    else amountTL = amount;
 
-                    // Tarihi ayarla
                     if (project.contractDate) {
                         const date = project.contractDate.toDate ? project.contractDate.toDate() : new Date(project.contractDate);
                         projectSummaryContractDate.textContent = date.toLocaleDateString('tr-TR');
-                        
                         updateContractDateInput.value = date.toISOString().split('T')[0];
-                        
-                        // SİMÜLASYON İÇİN GLOBAL DEĞİŞKENLERİ ATA
+                        // Tarihi global değişkene ata (Simülasyon için)
                         contractDateForSim = date;
-                        
-                        if (currency !== 'USD') {
-                            const dateStr = date.toISOString().split('T')[0];
-                            fetchCurrencyRates(dateStr, 'USD').then(usdRate => {
-                                if(usdRate) {
-                                    contractAmountUSDForSim = amountTL / usdRate;
-                                }
-                            });
-                        } else {
-                            contractAmountUSDForSim = amount;
-                        }
                     }
 
-                    // Gösterim
                     const fmtOriginal = amount.toLocaleString('tr-TR', { style: 'currency', currency: currency });
                     const fmtTL = amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                     if (currency !== 'TRY') contractDisplay = `${fmtOriginal} <small style="color:#666;">(${fmtTL})</small>`;
                     else contractDisplay = fmtOriginal;
                     projectSummaryContractAmount.innerHTML = contractDisplay;
 
-                    // Form Doldurma
                     updateProjectNameInput.value = project.projectName;
                     updateCustomerNameInput.value = project.customerName;
                     updateStatusSelect.value = project.status;
@@ -641,7 +616,6 @@
             } catch (error) { console.error(error); }
         }
 
-        // TAB TETİKLEYİCİSİ
         tabButtons.forEach(button => {
             button.addEventListener('click', () => {
                 const targetTab = button.dataset.tab;
@@ -651,11 +625,11 @@
                 document.getElementById(targetTab).classList.add('active');
                 
                 if (targetTab === 'summary') loadFinancialData(currentProjectId);
-                if (targetTab === 'simulation') runFantasySimulation(); // SİMÜLASYONU BAŞLAT
+                if (targetTab === 'simulation') runFantasySimulation();
             });
         });
 
-        // Event Listeners (Kur)
+        // Kur Tetikleyicileri (Proje Güncelleme)
         updateContractCurrencySelect.addEventListener('change', async () => {
             const curr = updateContractCurrencySelect.value;
             const date = updateContractDateInput.value;
@@ -675,10 +649,8 @@
             }
         });
 
-        // Form Submit Handlers
         updateProjectForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            // ... (Aynı kalacak, sadece özet)
             const newProjectName = updateProjectNameInput.value;
             const newCustomerName = updateCustomerNameInput.value;
             const newStatus = updateStatusSelect.value;
@@ -705,7 +677,6 @@
 
         addExpenseForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            // ... (Harcama ekleme mantığı - Aynı)
             const description = document.getElementById('expenseDescription').value;
             const amount = parseFloat(document.getElementById('expenseAmount').value);
             const currency = document.getElementById('expenseCurrency').value;
@@ -729,7 +700,6 @@
                 });
                 showSystemMessage('Harcama eklendi!');
                 addExpenseForm.reset();
-                // Reset defaults...
                 const today = new Date().toISOString().split('T')[0];
                 document.getElementById('expenseDate').value = today;
                 document.getElementById('expenseCurrency').value = 'TRY';
@@ -742,7 +712,6 @@
 
         addCollectionForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            // ... (Tahsilat ekleme mantığı - Aynı)
             const description = document.getElementById('collectionDescription').value;
             const amount = parseFloat(document.getElementById('collectionAmount').value);
             const currency = document.getElementById('collectionCurrency').value;
@@ -781,7 +750,6 @@
                 });
                 showSystemMessage('Tahsilat eklendi!');
                 addCollectionForm.reset();
-                // Reset defaults...
                 const today = new Date().toISOString().split('T')[0];
                 document.getElementById('collectionDate').value = today;
                 document.getElementById('collectionCurrency').value = 'TRY';
@@ -794,7 +762,7 @@
             } catch (error) { showSystemMessage('Hata: ' + error.message, true); }
         });
 
-        // ... Diğer event listener'lar (currency change vb.) aynı kalıyor ...
+        // Kur Tetikleyicileri (Harcama/Tahsilat)
         expenseCurrencySelect.addEventListener('change', async () => {
             const curr = expenseCurrencySelect.value;
             const date = expenseDateInput.value;
@@ -913,6 +881,22 @@
                 remainingBalanceTL.textContent = remainingBalance.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 remainingBalanceTL.classList.remove('positive', 'negative');
                 remainingBalanceTL.classList.add(remainingBalance >= 0 ? 'positive' : 'negative');
+
+                // --- SİMÜLASYON İÇİN KRİTİK ADIM ---
+                // Net Kar'ı hesapla ve USD'ye çevirip global değişkene ata
+                const netProfitTL = totalCollections - totalExpenses;
+                
+                const today = new Date().toISOString().split('T')[0];
+                const currentUsdRate = await fetchCurrencyRates(today, 'USD');
+                
+                if (currentUsdRate) {
+                    contractAmountUSDForSim = netProfitTL / currentUsdRate; // Net karın USD karşılığı
+                    
+                    if (simDescription) {
+                        simDescription.innerHTML = `Bu analiz, projenin şu anki <strong>Net Karı (~$${contractAmountUSDForSim.toLocaleString('en-US', {maximumFractionDigits:0})})</strong> ile sözleşme tarihinde yatırım yapılsaydı ne olurdu senaryosunu işler.`;
+                    }
+                }
+                // ------------------------------------
 
                 updateExpenseTable(expensesSnapshot);
                 updateCollectionTable(collectionsSnapshot);
