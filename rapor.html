@@ -11,8 +11,84 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* Rapor Sayfasına Özel Ek Stiller */
+        .cash-flow-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        .cash-card {
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            border: 1px solid #e0e0e0;
+        }
+        .cash-card h3 {
+            margin-top: 0;
+            font-size: 1.1em;
+            color: #555;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        .cash-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 0.95em;
+        }
+        .cash-row.total {
+            border-top: 1px dashed #ccc;
+            padding-top: 10px;
+            margin-top: 10px;
+            font-weight: 700;
+            font-size: 1.1em;
+        }
+        .badge-resmi {
+            background-color: #e3f2fd;
+            color: #0d47a1;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+        .badge-gayri {
+            background-color: #fff3e0;
+            color: #e65100;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+        .val-positive { color: #28a745; }
+        .val-negative { color: #dc3545; }
+        
+        /* Yükleniyor animasyonu */
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.8);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 1000;
+            display: none;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px; height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
 </head>
 <body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+    </div>
+
     <div class="container">
         <header>
             <h1>Dönemsel Analiz Raporu</h1>
@@ -27,85 +103,72 @@
         <h2 class="section-title">Rapor Filtresi</h2>
         <div class="form-grid report-filter-section">
             <div class="form-group">
-                <label for="startDate">Başlangıç Tarihi:</label>
+                <label for="startDate">Başlangıç Tarihi (Proje Oluşturma):</label>
                 <input type="date" id="startDate">
             </div>
             <div class="form-group">
-                <label for="endDate">Bitiş Tarihi:</label>
+                <label for="endDate">Bitiş Tarihi (Proje Oluşturma):</label>
                 <input type="date" id="endDate">
             </div>
             <div class="form-group full-width">
-                <button id="generateReportButton" class="button primary">Rapor Oluştur</button>
+                <button id="generateReportButton" class="button primary">Raporu Getir</button>
             </div>
         </div>
 
-        <h2 class="section-title">Genel Özet</h2>
-        <div class="summary-cards">
-            <div class="summary-card">
-                <h4>Proje Sayısı</h4>
-                <p id="totalProjects" class="summary-value"></p>
+        <h2 class="section-title">Nakit Akış Özeti (Gerçekleşen)</h2>
+        <p style="color:#666; margin-bottom:20px;">Aşağıdaki veriler, seçilen tarih aralığında oluşturulan projelerin <strong>bugüne kadar yapılmış</strong> tüm harcama ve tahsilatlarını içerir.</p>
+        
+        <div class="cash-flow-grid">
+            <div class="cash-card">
+                <h3>💸 Toplam Giderler</h3>
+                <div class="cash-row">
+                    <span class="badge-resmi">Resmi (Fatura)</span>
+                    <span id="sumExpResmi">0,00 ₺</span>
+                </div>
+                <div class="cash-row">
+                    <span class="badge-gayri">Gayri Resmi (Elden)</span>
+                    <span id="sumExpGayri">0,00 ₺</span>
+                </div>
+                <div class="cash-row total" style="color: #dc3545;">
+                    <span>TOPLAM ÇIKIŞ</span>
+                    <span id="sumExpTotal">0,00 ₺</span>
+                </div>
             </div>
-            <div class="summary-card">
-                <h4>Toplam Sözleşme Bedeli (TL)</h4>
-                <p id="totalContractAmountTL" class="summary-value"></p>
-            </div>
-        </div>
 
-        <h2 class="section-title">Kategori Bazında Finansal Analiz</h2>
-        <div class="financial-table-container">
-            <table class="financial-table">
-                <thead>
-                    <tr>
-                        <th>Kategori</th>
-                        <th>Proje Sayısı</th>
-                        <th>Proje Oranı (%)</th>
-                        <th>Toplam Sözleşme Bedeli (TL)</th>
-                        <th>Ciro Oranı (%)</th>
-                    </tr>
-                </thead>
-                <tbody id="categoryAnalysisTableBody">
-                    <tr><td colspan="5" style="text-align:center;">Rapor oluşturmak için tarihleri seçin.</td></tr>
-                </tbody>
-            </table>
+            <div class="cash-card">
+                <h3>💰 Toplam Gelirler</h3>
+                <div class="cash-row">
+                    <span class="badge-resmi">Resmi (Banka)</span>
+                    <span id="sumColResmi">0,00 ₺</span>
+                </div>
+                <div class="cash-row">
+                    <span class="badge-gayri">Gayri Resmi (Elden)</span>
+                    <span id="sumColGayri">0,00 ₺</span>
+                </div>
+                <div class="cash-row total" style="color: #28a745;">
+                    <span>TOPLAM GİRİŞ</span>
+                    <span id="sumColTotal">0,00 ₺</span>
+                </div>
+            </div>
+
+            <div class="cash-card">
+                <h3>📊 Net Kasa Durumu</h3>
+                <div class="cash-row">
+                    <span>Resmi Kasa Dengesi:</span>
+                    <span id="netResmi">0,00 ₺</span>
+                </div>
+                <div class="cash-row">
+                    <span>Şahsi Kasa Dengesi:</span>
+                    <span id="netGayri">0,00 ₺</span>
+                </div>
+                <div class="cash-row total">
+                    <span>GENEL NET</span>
+                    <span id="netTotal">0,00 ₺</span>
+                </div>
+            </div>
         </div>
 
         <h2 class="section-title">Detaylı Proje Listesi</h2>
-        <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));">
-            <div class="form-group">
-                <label for="detailedFilterStatus">Durum:</label>
-                <select id="detailedFilterStatus">
-                    <option value="">Tüm Durumlar</option>
-                    <option value="Başlamadı">Başlamadı</option>
-                    <option value="Devam Ediyor">Devam Ediyor</option>
-                    <option value="Takip Ediliyor">Takip Ediliyor</option>
-                    <option value="Tamamlandı">Tamamlandı</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="detailedFilterCategory">Kategori:</label>
-                <select id="detailedFilterCategory">
-                    <option value="">Tüm Kategoriler</option>
-                    <option value="Aydınlatma">Aydınlatma</option>
-                    <option value="Otomasyon">Otomasyon</option>
-                    <option value="Taahhüt">Taahhüt</option>
-                    <option value="Danışmanlık">Danışmanlık</option>
-                    <option value="Diğer">Diğer</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="detailedSortBy">Sırala:</label>
-                <select id="detailedSortBy">
-                    <option value="projectName_asc">Proje Adı (A-Z)</option>
-                    <option value="projectName_desc">Proje Adı (Z-A)</option>
-                    <option value="contractAmountTL_asc">Sözleşme Bedeli (Artan)</option>
-                    <option value="contractAmountTL_desc">Sözleşme Bedeli (Azalan)</option>
-                </select>
-            </div>
-            <div class="form-group full-width">
-                <button class="button secondary" id="resetDetailedFilters">Filtreleri Sıfırla</button>
-            </div>
-        </div>
-        
         <div class="financial-table-container">
             <table class="financial-table index-table">
                 <thead>
@@ -113,13 +176,15 @@
                         <th>Proje Adı</th>
                         <th>Müşteri</th>
                         <th>Kategoriler</th>
-                        <th>Durum</th>
-                        <th>Sözleşme Bedeli (TL)</th>
+                        <th>Sözleşme (TL)</th>
+                        <th>Top. Tahsilat</th>
+                        <th>Top. Harcama</th>
+                        <th>Net Durum</th>
                         <th>İşlemler</th>
                     </tr>
                 </thead>
                 <tbody id="detailedProjectListBody">
-                    <tr><td colspan="6" style="text-align:center;">Detaylı proje listesi için raporu oluşturun.</td></tr>
+                    <tr><td colspan="8" style="text-align:center;">Rapor oluşturmak için tarihleri seçin.</td></tr>
                 </tbody>
             </table>
         </div>
@@ -144,46 +209,49 @@
         const db = firebase.firestore();
 
         let currentUserId = null;
-        let allProjects = [];
-        let filteredProjects = [];
 
         const userEmailSpan = document.getElementById('userEmail');
         const logoutButton = document.getElementById('logoutButton');
         const systemMessageDiv = document.getElementById('systemMessage');
+        const loadingOverlay = document.getElementById('loadingOverlay');
 
         const startDateInput = document.getElementById('startDate');
         const endDateInput = document.getElementById('endDate');
         const generateReportButton = document.getElementById('generateReportButton');
 
-        const totalProjectsSpan = document.getElementById('totalProjects');
-        const totalContractAmountTLSpan = document.getElementById('totalContractAmountTL');
+        // Özet Alanları
+        const sumExpResmi = document.getElementById('sumExpResmi');
+        const sumExpGayri = document.getElementById('sumExpGayri');
+        const sumExpTotal = document.getElementById('sumExpTotal');
+        
+        const sumColResmi = document.getElementById('sumColResmi');
+        const sumColGayri = document.getElementById('sumColGayri');
+        const sumColTotal = document.getElementById('sumColTotal');
 
-        const categoryAnalysisTableBody = document.getElementById('categoryAnalysisTableBody');
-        const detailedFilterStatus = document.getElementById('detailedFilterStatus');
-        const detailedFilterCategory = document.getElementById('detailedFilterCategory');
-        const detailedSortBy = document.getElementById('detailedSortBy');
-        const resetDetailedFiltersButton = document.getElementById('resetDetailedFilters');
+        const netResmi = document.getElementById('netResmi');
+        const netGayri = document.getElementById('netGayri');
+        const netTotal = document.getElementById('netTotal');
+
         const detailedProjectListBody = document.getElementById('detailedProjectListBody');
 
         auth.onAuthStateChanged(user => {
             if (user) {
                 currentUserId = user.uid;
                 userEmailSpan.textContent = user.email;
-                showSystemMessage('Rapor sayfası yüklendi. Tarihleri seçerek rapor oluşturabilirsiniz.', false);
-
-                const today = new Date();
-                const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
                 
-                const format = (date) => {
-                    const year = date.getFullYear();
-                    const month = String(date.getMonth() + 1).padStart(2, '0');
-                    const day = String(date.getDate()).padStart(2, '0');
-                    return `${year}-${month}-${day}`;
+                // Varsayılan tarih ayarı (Bu ayın başı ve sonu)
+                const today = new Date();
+                const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+                const format = (d) => {
+                    const y = d.getFullYear();
+                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${day}`;
                 };
-
-                startDateInput.value = format(firstDayOfMonth);
+                startDateInput.value = format(firstDay);
                 endDateInput.value = format(today);
 
+                // Otomatik raporu getir
                 generateReport();
             } else {
                 window.location.href = 'auth.html';
@@ -193,213 +261,189 @@
         logoutButton.addEventListener('click', async () => {
             try {
                 await auth.signOut();
-                console.log('Kullanıcı çıkış yaptı.');
             } catch (error) {
-                console.error('Çıkış yaparken hata oluştu:', error.message);
-                showSystemMessage('Çıkış yaparken hata oluştu: ' + error.message, true);
+                console.error(error);
             }
         });
 
         function showSystemMessage(message, isError = false) {
             systemMessageDiv.textContent = message;
-            systemMessageDiv.className = 'message';
-            if (isError) {
-                systemMessageDiv.classList.add('error-message');
-            } else {
-                systemMessageDiv.classList.add('success');
-            }
+            systemMessageDiv.className = 'message ' + (isError ? 'error-message' : 'success');
             systemMessageDiv.classList.add('show');
-            setTimeout(() => {
-                systemMessageDiv.classList.remove('show');
-            }, 5000);
+            setTimeout(() => systemMessageDiv.classList.remove('show'), 5000);
+        }
+
+        function toggleLoading(show) {
+            loadingOverlay.style.display = show ? 'flex' : 'none';
         }
 
         generateReportButton.addEventListener('click', generateReport);
-        detailedFilterStatus.addEventListener('change', () => displayDetailedProjects(filteredProjects));
-        detailedFilterCategory.addEventListener('change', () => displayDetailedProjects(filteredProjects));
-        detailedSortBy.addEventListener('change', () => displayDetailedProjects(filteredProjects));
-        resetDetailedFiltersButton.addEventListener('click', () => {
-            detailedFilterStatus.value = '';
-            detailedFilterCategory.value = '';
-            detailedSortBy.value = 'projectName_asc';
-            displayDetailedProjects(filteredProjects);
-        });
 
         async function generateReport() {
-            if (!currentUserId) {
-                showSystemMessage('Kullanıcı bilgileri yükleniyor...', true);
-                return;
-            }
+            if (!currentUserId) return;
 
             const startDate = startDateInput.value ? new Date(startDateInput.value) : null;
             const endDate = endDateInput.value ? new Date(endDateInput.value) : null;
 
             if (startDate && endDate && startDate > endDate) {
-                showSystemMessage('Başlangıç tarihi bitiş tarihinden sonra olamaz!', true);
+                showSystemMessage('Başlangıç tarihi bitiş tarihinden büyük olamaz.', true);
                 return;
             }
 
-            showSystemMessage('Rapor oluşturuluyor...', false);
+            toggleLoading(true);
             resetReportData();
 
             try {
-                const projectsRef = db.collection('projects').where('ownerId', '==', currentUserId);
-                const snapshot = await projectsRef.get();
-                allProjects = [];
-                let tempFilteredProjects = [];
+                // 1. Filtreye uyan projeleri çek
+                let query = db.collection('projects').where('ownerId', '==', currentUserId);
+                
+                // Client-side filtering for dates to keep indexes simple
+                const snapshot = await query.get();
+                const projects = [];
 
-                if (snapshot.empty) {
-                    showSystemMessage('Henüz hiç proje yok.', true);
+                // Tarih filtresini uygula
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const createdAt = data.createdAt ? data.createdAt.toDate() : null;
+                    
+                    let include = true;
+                    if (createdAt) {
+                        if (startDate && createdAt < startDate) include = false;
+                        // Bitiş tarihinin gün sonuna kadar alması için (endDate + 1 gün gibi davranmalı veya saat karşılaştırmalı)
+                        const endDay = new Date(endDate);
+                        endDay.setHours(23,59,59);
+                        if (endDate && createdAt > endDay) include = false;
+                    }
+                    
+                    if (include) {
+                        projects.push({ id: doc.id, ...data });
+                    }
+                });
+
+                if (projects.length === 0) {
+                    detailedProjectListBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Seçilen tarih aralığında proje bulunamadı.</td></tr>';
+                    toggleLoading(false);
                     return;
                 }
 
-                let totalContractAmount = 0;
-                let totalProjectCount = 0;
-                const categoryData = {};
+                // 2. Her projenin altındaki harcama ve tahsilatları çek (Parallel Requests)
+                // Dikkat: Çok fazla proje varsa bu işlem okuma kotasını etkiler.
+                let grandTotalStats = {
+                    expResmi: 0, expGayri: 0,
+                    colResmi: 0, colGayri: 0
+                };
 
-                for (const doc of snapshot.docs) {
-                    const project = doc.data();
-                    const projectId = doc.id;
+                // Tabloyu doldurmak için HTML string
+                let tableRowsHTML = '';
 
-                    const createdAt = project.createdAt ? project.createdAt.toDate() : null;
-                    if (createdAt) {
-                        if (startDate && createdAt < startDate) continue;
-                        if (endDate && createdAt > endDate) continue;
-                    }
-
-                    tempFilteredProjects.push({ id: projectId, ...project });
-
-                    let contractAmountTL = project.contractAmount || 0;
-                    if (project.contractCurrency !== 'TRY' && project.contractExchangeRate) {
-                        contractAmountTL = project.contractAmount * project.contractExchangeRate;
-                    }
-                    totalContractAmount += contractAmountTL;
-                    totalProjectCount++;
-
-                    project.categories.forEach(cat => {
-                        if (!categoryData[cat]) {
-                            categoryData[cat] = {
-                                projectCount: 0,
-                                totalContractAmount: 0
-                            };
-                        }
-                        categoryData[cat].projectCount++;
-                        categoryData[cat].totalContractAmount += contractAmountTL;
+                // Projeler üzerinde dön
+                const promises = projects.map(async (project) => {
+                    // Harcamaları çek
+                    const expSnap = await db.collection('projects').doc(project.id).collection('expenses').get();
+                    let pExp = 0; // Proje Toplam Gider
+                    
+                    expSnap.forEach(doc => {
+                        const d = doc.data();
+                        const val = d.amountTL || 0;
+                        pExp += val;
+                        
+                        if (d.recordType === 'Gayri Resmi') grandTotalStats.expGayri += val;
+                        else grandTotalStats.expResmi += val;
                     });
-                }
 
-                filteredProjects = tempFilteredProjects;
+                    // Tahsilatları çek
+                    const colSnap = await db.collection('projects').doc(project.id).collection('collections').get();
+                    let pCol = 0; // Proje Toplam Gelir
 
-                totalProjectsSpan.textContent = totalProjectCount;
-                totalContractAmountTLSpan.textContent = totalContractAmount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                    colSnap.forEach(doc => {
+                        const d = doc.data();
+                        const val = d.amountTL || 0;
+                        pCol += val;
 
-                displayCategoryAnalysis(categoryData, totalProjectCount, totalContractAmount);
-                displayDetailedProjects(filteredProjects);
-                showSystemMessage('Rapor başarıyla oluşturuldu.', false);
+                        if (d.recordType === 'Gayri Resmi') grandTotalStats.colGayri += val;
+                        else grandTotalStats.colResmi += val;
+                    });
+
+                    // Sözleşme Bedeli Hesapla
+                    let contractTL = project.contractAmount || 0;
+                    if (project.contractCurrency !== 'TRY' && project.contractExchangeRate) {
+                        contractTL = project.contractAmount * project.contractExchangeRate;
+                    }
+
+                    // Projenin Net Durumu
+                    const pNet = pCol - pExp;
+                    const netColor = pNet >= 0 ? '#28a745' : '#dc3545';
+
+                    // Satırı oluştur (Sıralama yapmadık, olduğu gibi ekliyoruz)
+                    return `
+                        <tr>
+                            <td><strong>${project.projectName}</strong></td>
+                            <td>${project.customerName}</td>
+                            <td>${(project.categories || []).join(', ')}</td>
+                            <td style="text-align:right;">${contractTL.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})}</td>
+                            <td style="text-align:right; color:#28a745;">${pCol.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})}</td>
+                            <td style="text-align:right; color:#dc3545;">${pExp.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})}</td>
+                            <td style="text-align:right; font-weight:bold; color:${netColor};">${pNet.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})}</td>
+                            <td class="actions-cell">
+                                <a href="pd.html?id=${project.id}" class="action-link">Detay</a>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                // Tüm verilerin çekilmesini bekle
+                const rows = await Promise.all(promises);
+                detailedProjectListBody.innerHTML = rows.join('');
+
+                // 3. Özet Kartlarını Güncelle
+                const totalExp = grandTotalStats.expResmi + grandTotalStats.expGayri;
+                const totalCol = grandTotalStats.colResmi + grandTotalStats.colGayri;
+                const netResmiVal = grandTotalStats.colResmi - grandTotalStats.expResmi;
+                const netGayriVal = grandTotalStats.colGayri - grandTotalStats.expGayri;
+                const netTotalVal = totalCol - totalExp;
+
+                // DOM güncelleme
+                sumExpResmi.textContent = grandTotalStats.expResmi.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
+                sumExpGayri.textContent = grandTotalStats.expGayri.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
+                sumExpTotal.textContent = totalExp.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
+
+                sumColResmi.textContent = grandTotalStats.colResmi.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
+                sumColGayri.textContent = grandTotalStats.colGayri.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
+                sumColTotal.textContent = totalCol.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
+
+                netResmi.textContent = netResmiVal.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
+                netResmi.className = netResmiVal >= 0 ? 'val-positive' : 'val-negative';
+
+                netGayri.textContent = netGayriVal.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
+                netGayri.className = netGayriVal >= 0 ? 'val-positive' : 'val-negative';
+
+                netTotal.textContent = netTotalVal.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
+                netTotal.className = netTotalVal >= 0 ? 'val-positive' : 'val-negative';
+
+                showSystemMessage('Rapor güncellendi.', false);
 
             } catch (error) {
-                console.error('Rapor oluşturulurken hata oluştu:', error);
-                showSystemMessage('Rapor oluşturulurken bir hata oluştu: ' + error.message, true);
-                resetReportData();
+                console.error('Rapor hatası:', error);
+                showSystemMessage('Rapor oluşturulurken hata: ' + error.message, true);
+            } finally {
+                toggleLoading(false);
             }
         }
 
         function resetReportData() {
-            totalProjectsSpan.textContent = '0';
-            totalContractAmountTLSpan.textContent = '0,00 ₺';
-            categoryAnalysisTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Rapor oluşturmak için tarihleri seçin.</td></tr>';
-            detailedProjectListBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Detaylı proje listesi için raporu oluşturun.</td></tr>';
-        }
+            sumExpResmi.textContent = '0,00 ₺';
+            sumExpGayri.textContent = '0,00 ₺';
+            sumExpTotal.textContent = '0,00 ₺';
+            
+            sumColResmi.textContent = '0,00 ₺';
+            sumColGayri.textContent = '0,00 ₺';
+            sumColTotal.textContent = '0,00 ₺';
 
-        function displayCategoryAnalysis(categoryData, totalProjectCount, totalContractAmount) {
-            categoryAnalysisTableBody.innerHTML = '';
-
-            if (Object.keys(categoryData).length === 0) {
-                categoryAnalysisTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: #666;">Veri bulunamadı.</td></tr>';
-                return;
-            }
-
-            Object.keys(categoryData).forEach(cat => {
-                const data = categoryData[cat];
-                const projeOrani = totalProjectCount > 0 ? ((data.projectCount / totalProjectCount) * 100).toFixed(2) : 0;
-                const ciroOrani = totalContractAmount > 0 ? ((data.totalContractAmount / totalContractAmount) * 100).toFixed(2) : 0;
-
-                const row = categoryAnalysisTableBody.insertRow();
-                row.insertCell(0).textContent = cat;
-                row.insertCell(1).textContent = data.projectCount;
-                const projeOranCell = row.insertCell(2);
-                projeOranCell.textContent = `${projeOrani}%`;
-                projeOranCell.style.fontWeight = '600';
-                projeOranCell.style.color = '#007bff';
-
-                row.insertCell(3).textContent = data.totalContractAmount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                const ciroOranCell = row.insertCell(4);
-                ciroOranCell.textContent = `${ciroOrani}%`;
-                ciroOranCell.style.fontWeight = '600';
-                ciroOranCell.style.color = '#28a745';
-            });
-        }
-
-        function displayDetailedProjects(projectsToDisplay) {
+            netResmi.textContent = '0,00 ₺';
+            netGayri.textContent = '0,00 ₺';
+            netTotal.textContent = '0,00 ₺';
+            
             detailedProjectListBody.innerHTML = '';
-            let currentProjects = [...projectsToDisplay];
-
-            const statusFilter = detailedFilterStatus.value;
-            const categoryFilter = detailedFilterCategory.value;
-
-            if (statusFilter) currentProjects = currentProjects.filter(p => p.status === statusFilter);
-            if (categoryFilter) currentProjects = currentProjects.filter(p => p.categories?.includes(categoryFilter));
-
-            const sortOption = detailedSortBy.value;
-            currentProjects.sort((a, b) => {
-                let valA, valB;
-                switch (sortOption) {
-                    case 'projectName_asc':
-                        return (a.projectName || '').localeCompare(b.projectName || '');
-                    case 'projectName_desc':
-                        return (b.projectName || '').localeCompare(a.projectName || '');
-                    case 'contractAmountTL_asc':
-                        return (a.contractAmount || 0) - (b.contractAmount || 0);
-                    case 'contractAmountTL_desc':
-                        return (b.contractAmount || 0) - (a.contractAmount || 0);
-                    default:
-                        return 0;
-                }
-            });
-
-            if (currentProjects.length === 0) {
-                detailedProjectListBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: #666;">Filtreyle eşleşen proje yok.</td></tr>';
-                return;
-            }
-
-            currentProjects.forEach(project => {
-                const row = detailedProjectListBody.insertRow();
-                row.insertCell(0).textContent = project.projectName;
-                row.insertCell(1).textContent = project.customerName;
-                row.insertCell(2).textContent = (project.categories && project.categories.length > 0) ? project.categories.join(', ') : 'Belirtilmemiş';
-
-                const statusCell = row.insertCell(3);
-                const statusSpan = document.createElement('span');
-                statusSpan.textContent = project.status;
-                statusSpan.classList.add('status-badge');
-                statusSpan.classList.add('status-' + project.status.toLowerCase().replace(/ /g, ''));
-                statusCell.appendChild(statusSpan);
-
-                let contractAmountTL = project.contractAmount || 0;
-                if (project.contractCurrency !== 'TRY' && project.contractExchangeRate) {
-                    contractAmountTL = project.contractAmount * project.contractExchangeRate;
-                }
-                const amountCell = row.insertCell(4);
-                amountCell.textContent = contractAmountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-
-                const actionsCell = row.insertCell(5);
-                actionsCell.classList.add('actions-cell');
-                const detailLink = document.createElement('a');
-                detailLink.href = `pd.html?id=${project.id}`;
-                detailLink.textContent = 'Detaylar';
-                detailLink.classList.add('action-link');
-                actionsCell.appendChild(detailLink);
-            });
         }
     </script>
 </body>
