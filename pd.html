@@ -13,39 +13,44 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
     <link rel="stylesheet" href="style.css">
     <style>
-        /* Resmi/Gayri Resmi ayrımı için ek stiller */
-        .type-badge {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.75em;
-            font-weight: 600;
+        /* Rozetler */
+        .type-badge { padding: 4px 8px; border-radius: 4px; font-size: 0.75em; font-weight: 600; }
+        .type-resmi { background-color: #e3f2fd; color: #0d47a1; border: 1px solid #bbdefb; }
+        .type-gayriresmi { background-color: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; }
+        
+        /* Özet Kartları Alt Bilgi */
+        .sub-summary { font-size: 0.85em; color: #666; margin-top: 5px; text-align: left; padding-left: 10px; border-left: 3px solid #eee; }
+        .sub-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+        
+        /* USD Gösterimi */
+        .usd-equivalent {
+            display: block;
+            font-size: 0.6em;
+            color: #28a745; /* Dolar yeşili */
+            font-weight: 500;
+            margin-top: -5px;
+            margin-bottom: 10px;
         }
-        .type-resmi {
-            background-color: #e3f2fd;
-            color: #0d47a1;
-            border: 1px solid #bbdefb;
+        
+        /* Yükleniyor */
+        .loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.8);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 1000; display: none;
         }
-        .type-gayriresmi {
-            background-color: #fff3e0;
-            color: #e65100;
-            border: 1px solid #ffe0b2;
+        .spinner {
+            border: 4px solid #f3f3f3; border-top: 4px solid #3498db;
+            border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;
         }
-        .sub-summary {
-            font-size: 0.85em;
-            color: #666;
-            margin-top: 5px;
-            text-align: left;
-            padding-left: 10px;
-            border-left: 3px solid #eee;
-        }
-        .sub-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 2px;
-        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+    </div>
+
     <div class="container">
         <header>
             <h1 id="projectHeaderTitle">Proje Detayları</h1>
@@ -62,7 +67,7 @@
             <p><strong>Müşteri:</strong> <span id="projectSummaryCustomer"></span></p>
             <p><strong>Kategoriler:</strong> <span id="projectSummaryCategories"></span></p>
             <p><strong>Durum:</strong> <span id="projectSummaryStatus" class="status-badge"></span></p>
-            <p><strong>Sözleşme Bedeli:</strong> <span id="projectSummaryContractAmount"></span></p>
+            <p><strong>Sözleşme Bedeli:</strong> <span id="projectSummaryContractAmount" style="font-size: 1.2em; color: #0056b3;"></span></p>
             <p><strong>Sözleşme Tarihi:</strong> <span id="projectSummaryContractDate"></span></p>
         </div>
 
@@ -104,7 +109,7 @@
             <div class="form-group">
                 <label for="updateContractExchangeRate">Kur (1 USD/EUR = ... TL):</label>
                 <input type="number" id="updateContractExchangeRate" step="0.0001" value="1" required>
-                <small>Tarih ve para birimi seçildiğinde otomatik gelir. Manuel girmek için yazın.</small>
+                <small>Tarih ve para birimi seçildiğinde otomatik gelir.</small>
             </div>
             <div class="form-group full-width">
                 <button type="submit" class="button primary">Proje Bilgilerini Güncelle</button>
@@ -262,27 +267,30 @@
         </div>
 
         <div id="summary" class="tab-content">
-            <h3 class="section-subtitle">Finansal Özet (Resmi & Gayri Resmi)</h3>
+            <h3 class="section-subtitle">Finansal Özet</h3>
             <div class="summary-cards">
                 <div class="summary-card">
-                    <h4>Toplam Harcama (TL)</h4>
+                    <h4>Toplam Harcama</h4>
                     <p id="totalExpensesTL" class="summary-value"></p>
+                    <span id="totalExpensesUSD" class="usd-equivalent"></span>
                     <div class="sub-summary">
                         <div class="sub-row"><span>Resmi:</span> <span id="totalExpensesResmi">0 ₺</span></div>
                         <div class="sub-row"><span>Gayri Resmi:</span> <span id="totalExpensesGayri">0 ₺</span></div>
                     </div>
                 </div>
                 <div class="summary-card">
-                    <h4>Toplam Tahsilat (TL)</h4>
+                    <h4>Toplam Tahsilat</h4>
                     <p id="totalCollectionsTL" class="summary-value"></p>
+                    <span id="totalCollectionsUSD" class="usd-equivalent"></span>
                     <div class="sub-summary">
                         <div class="sub-row"><span>Resmi:</span> <span id="totalCollectionsResmi">0 ₺</span></div>
                         <div class="sub-row"><span>Gayri Resmi:</span> <span id="totalCollectionsGayri">0 ₺</span></div>
                     </div>
                 </div>
                 <div class="summary-card">
-                    <h4>Kalan Bakiye (TL)</h4>
+                    <h4>Kalan Bakiye (Net Kar/Zarar)</h4>
                     <p id="remainingBalanceTL" class="summary-value"></p>
+                    <span id="remainingBalanceUSD" class="usd-equivalent"></span>
                     <div class="sub-summary">
                         <small style="color: #888;">(Sözleşme Bedeli - Tüm Tahsilatlar)</small>
                     </div>
@@ -317,6 +325,7 @@
         let currentUserId = null;
         let balanceChart = null;
 
+        // Elements
         const userEmailSpan = document.getElementById('userEmail');
         const logoutButton = document.getElementById('logoutButton');
         const systemMessageDiv = document.getElementById('systemMessage');
@@ -328,7 +337,7 @@
         const projectSummaryContractAmount = document.getElementById('projectSummaryContractAmount');
         const projectSummaryContractDate = document.getElementById('projectSummaryContractDate');
         
-        // Form Elements
+        // Forms
         const updateProjectForm = document.getElementById('updateProjectForm');
         const updateProjectNameInput = document.getElementById('updateProjectName');
         const updateCustomerNameInput = document.getElementById('updateCustomerName');
@@ -341,7 +350,7 @@
         const tabButtons = document.querySelectorAll('.tab-button');
         const tabContents = document.querySelectorAll('.tab-content');
         
-        // Expense Elements
+        // Expense
         const addExpenseForm = document.getElementById('addExpenseForm');
         const expenseListBody = document.getElementById('expenseListBody');
         const expenseCurrencySelect = document.getElementById('expenseCurrency');
@@ -349,26 +358,31 @@
         const expenseExchangeRateGroup = document.getElementById('expenseExchangeRateGroup');
         const expenseDateInput = document.getElementById('expenseDate');
         
-        // Collection Elements
+        // Collection
         const addCollectionForm = document.getElementById('addCollectionForm');
         const collectionListBody = document.getElementById('collectionListBody');
         const collectionCurrencySelect = document.getElementById('collectionCurrency');
         const collectionExchangeRateInput = document.getElementById('collectionExchangeRate');
         const collectionExchangeRateGroup = document.getElementById('collectionExchangeRateGroup');
         const collectionDateInput = document.getElementById('collectionDate');
-        const collectionTypeSelect = document.getElementById('collectionPaymentType'); // Ödeme Yöntemi
+        const collectionTypeSelect = document.getElementById('collectionPaymentType');
         const checkDetailsDiv = document.getElementById('checkDetailsDiv');
         const barterDetailsDiv = document.getElementById('barterDetailsDiv');
         const checkNumberInput = document.getElementById('checkNumber');
         const checkMaturityDateInput = document.getElementById('checkMaturityDate');
         const barterDescriptionTextarea = document.getElementById('barterDescription');
 
-        // Summary Elements
+        // Summary Main
         const totalExpensesTL = document.getElementById('totalExpensesTL');
         const totalCollectionsTL = document.getElementById('totalCollectionsTL');
         const remainingBalanceTL = document.getElementById('remainingBalanceTL');
         
-        // Sub-Summary Elements (New)
+        // Summary USD Equivalents (New)
+        const totalExpensesUSD = document.getElementById('totalExpensesUSD');
+        const totalCollectionsUSD = document.getElementById('totalCollectionsUSD');
+        const remainingBalanceUSD = document.getElementById('remainingBalanceUSD');
+
+        // Sub-Summary
         const totalExpensesResmi = document.getElementById('totalExpensesResmi');
         const totalExpensesGayri = document.getElementById('totalExpensesGayri');
         const totalCollectionsResmi = document.getElementById('totalCollectionsResmi');
@@ -417,14 +431,11 @@
             systemMessageDiv.className = 'message';
             if (isError) systemMessageDiv.classList.add('error-message');
             else systemMessageDiv.classList.add('success');
-            
             systemMessageDiv.classList.add('show');
-            setTimeout(() => {
-                systemMessageDiv.classList.remove('show');
-            }, 5000);
+            setTimeout(() => { systemMessageDiv.classList.remove('show'); }, 5000);
         }
 
-        // CDN Kur Çekme (FawazAhmed0/Currency-API)
+        // CDN Kur Çekme
         async function fetchCurrencyRates(dateString, currencyCode) {
             try {
                 if (currencyCode === 'TRY') return 1;
@@ -480,11 +491,28 @@
                     projectSummaryStatus.textContent = project.status;
                     projectSummaryStatus.className = 'status-badge status-' + project.status.toLowerCase().replace(/ /g, '');
 
-                    let contractAmountTL = project.contractAmount || 0;
-                    if (project.contractCurrency !== 'TRY' && project.contractExchangeRate) {
-                        contractAmountTL = project.contractAmount * project.contractExchangeRate;
+                    // --- SÖZLEŞME BEDELİ GÖRÜNÜMÜ GÜNCELLENDİ ---
+                    let contractDisplay = '';
+                    const amount = project.contractAmount || 0;
+                    const currency = project.contractCurrency || 'TRY';
+                    
+                    // TL Karşılığı Hesapla (Parantez içi için)
+                    let amountTL = amount;
+                    if (currency !== 'TRY' && project.contractExchangeRate) {
+                        amountTL = amount * project.contractExchangeRate;
                     }
-                    projectSummaryContractAmount.textContent = contractAmountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+
+                    // Gösterim Formatı: 50.000 USD (1.500.000 ₺)
+                    const formattedOriginal = amount.toLocaleString('tr-TR', { style: 'currency', currency: currency });
+                    const formattedTL = amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+
+                    if (currency !== 'TRY') {
+                        contractDisplay = `${formattedOriginal} <small style="color:#666; font-size:0.8em;">(${formattedTL})</small>`;
+                    } else {
+                        contractDisplay = formattedOriginal;
+                    }
+                    projectSummaryContractAmount.innerHTML = contractDisplay;
+                    // ---------------------------------------------
 
                     if (project.contractDate) {
                         const date = project.contractDate.toDate ? project.contractDate.toDate() : new Date(project.contractDate);
@@ -507,30 +535,28 @@
             }
         }
 
-        // Proje Güncelleme Kur Tetikleyicileri
+        // Form Event Listeners (Kur Çekme)
         updateContractCurrencySelect.addEventListener('change', async () => {
-            const selectedCurrency = updateContractCurrencySelect.value;
-            const selectedDate = updateContractDateInput.value;
-            if (selectedCurrency === 'TRY') {
-                updateContractExchangeRateInput.value = '1';
-            } else if (selectedDate) {
-                const rate = await fetchCurrencyRates(selectedDate, selectedCurrency);
+            const curr = updateContractCurrencySelect.value;
+            const date = updateContractDateInput.value;
+            if (curr === 'TRY') updateContractExchangeRateInput.value = '1';
+            else if (date) {
+                const rate = await fetchCurrencyRates(date, curr);
                 if (rate) updateContractExchangeRateInput.value = rate.toFixed(4);
             }
         });
 
         updateContractDateInput.addEventListener('change', async () => {
-            const selectedCurrency = updateContractCurrencySelect.value;
-            const selectedDate = updateContractDateInput.value;
-            if (selectedCurrency !== 'TRY' && selectedDate) {
-                const rate = await fetchCurrencyRates(selectedDate, selectedCurrency);
+            const curr = updateContractCurrencySelect.value;
+            const date = updateContractDateInput.value;
+            if (curr !== 'TRY' && date) {
+                const rate = await fetchCurrencyRates(date, curr);
                 if (rate) updateContractExchangeRateInput.value = rate.toFixed(4);
             }
         });
 
         updateProjectForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            // Form verilerini al
             const newProjectName = updateProjectNameInput.value;
             const newCustomerName = updateCustomerNameInput.value;
             const newStatus = updateStatusSelect.value;
@@ -553,7 +579,7 @@
                 loadProjectDetails(currentProjectId);
                 loadFinancialData(currentProjectId);
             } catch (error) {
-                showSystemMessage('Güncelleme hatası: ' + error.message, true);
+                showSystemMessage('Hata: ' + error.message, true);
             }
         });
 
@@ -568,7 +594,7 @@
             });
         });
 
-        // HARCAMA EKLEME
+        // Harcama Ekleme
         addExpenseForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const description = document.getElementById('expenseDescription').value;
@@ -576,7 +602,7 @@
             const currency = document.getElementById('expenseCurrency').value;
             const exchangeRate = parseFloat(document.getElementById('exchangeRate').value);
             const date = document.getElementById('expenseDate').value;
-            const recordType = document.getElementById('expenseType').value; // YENİ ALAN
+            const recordType = document.getElementById('expenseType').value;
 
             if (!description || amount <= 0 || !date) return;
 
@@ -584,7 +610,7 @@
                 const amountTL = amount * exchangeRate;
                 await db.collection('projects').doc(currentProjectId).collection('expenses').add({
                     description: description,
-                    recordType: recordType, // VERİTABANINA KAYDET
+                    recordType: recordType,
                     amount: amount,
                     currency: currency,
                     exchangeRate: exchangeRate,
@@ -594,25 +620,19 @@
                 });
                 showSystemMessage('Harcama eklendi!');
                 addExpenseForm.reset();
-                
-                // Formu sıfırla ama tarih ve kurları koru
                 const today = new Date();
-                const yyyy = today.getFullYear();
-                const mm = String(today.getMonth() + 1).padStart(2, '0');
-                const dd = String(today.getDate()).padStart(2, '0');
-                document.getElementById('expenseDate').value = `${yyyy}-${mm}-${dd}`;
+                document.getElementById('expenseDate').value = today.toISOString().split('T')[0];
                 document.getElementById('expenseCurrency').value = 'TRY';
                 document.getElementById('exchangeRate').value = '1';
                 document.getElementById('expenseType').value = 'Resmi';
                 expenseExchangeRateGroup.style.display = 'none';
-                
                 loadFinancialData(currentProjectId);
             } catch (error) {
                 showSystemMessage('Hata: ' + error.message, true);
             }
         });
 
-        // TAHSİLAT EKLEME
+        // Tahsilat Ekleme
         addCollectionForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const description = document.getElementById('collectionDescription').value;
@@ -621,35 +641,27 @@
             const exchangeRate = parseFloat(document.getElementById('collectionExchangeRate').value);
             const date = document.getElementById('collectionDate').value;
             const paymentType = document.getElementById('collectionPaymentType').value;
-            const recordType = document.getElementById('collectionTypeInput').value; // YENİ ALAN
+            const recordType = document.getElementById('collectionTypeInput').value;
 
             if (!description || amount <= 0 || !date || !paymentType) return;
 
-            // Ödeme detayları
             let checkNumber = '';
             let checkMaturityDate = '';
             let barterDescription = '';
-            
             if (paymentType === 'Çek' || paymentType === 'Senet') {
                 checkNumber = document.getElementById('checkNumber').value.trim();
                 checkMaturityDate = document.getElementById('checkMaturityDate').value;
-                if (!checkNumber || !checkMaturityDate) {
-                    showSystemMessage('Çek/Senet bilgileri eksik.', true);
-                    return;
-                }
+                if (!checkNumber || !checkMaturityDate) return showSystemMessage('Çek/Senet bilgileri eksik.', true);
             } else if (paymentType === 'Barter') {
                 barterDescription = document.getElementById('barterDescription').value.trim();
-                if (!barterDescription) {
-                    showSystemMessage('Barter açıklaması eksik.', true);
-                    return;
-                }
+                if (!barterDescription) return showSystemMessage('Barter açıklaması eksik.', true);
             }
 
             try {
                 const amountTL = amount * exchangeRate;
                 await db.collection('projects').doc(currentProjectId).collection('collections').add({
                     description: description,
-                    recordType: recordType, // VERİTABANINA KAYDET
+                    recordType: recordType,
                     amount: amount,
                     currency: currency,
                     exchangeRate: exchangeRate,
@@ -663,27 +675,20 @@
                 });
                 showSystemMessage('Tahsilat eklendi!');
                 addCollectionForm.reset();
-                
-                // Form sıfırlama
                 const today = new Date();
-                const yyyy = today.getFullYear();
-                const mm = String(today.getMonth() + 1).padStart(2, '0');
-                const dd = String(today.getDate()).padStart(2, '0');
-                document.getElementById('collectionDate').value = `${yyyy}-${mm}-${dd}`;
+                document.getElementById('collectionDate').value = today.toISOString().split('T')[0];
                 document.getElementById('collectionCurrency').value = 'TRY';
                 document.getElementById('collectionExchangeRate').value = '1';
                 document.getElementById('collectionTypeInput').value = 'Resmi';
                 collectionExchangeRateGroup.style.display = 'none';
                 checkDetailsDiv.style.display = 'none';
                 barterDetailsDiv.style.display = 'none';
-                
                 loadFinancialData(currentProjectId);
             } catch (error) {
                 showSystemMessage('Hata: ' + error.message, true);
             }
         });
 
-        // Kur Tetikleyicileri (Harcama/Tahsilat)
         expenseCurrencySelect.addEventListener('change', async () => {
             const curr = expenseCurrencySelect.value;
             const date = expenseDateInput.value;
@@ -711,8 +716,7 @@
         collectionCurrencySelect.addEventListener('change', async () => {
             const curr = collectionCurrencySelect.value;
             const date = collectionDateInput.value;
-            const type = collectionTypeSelect.value; // Ödeme yöntemi (Barter vb.)
-            
+            const type = collectionTypeSelect.value;
             if (curr === 'TRY' || type === 'Barter') {
                 collectionExchangeRateInput.value = '1';
                 collectionExchangeRateGroup.style.display = 'none';
@@ -739,7 +743,6 @@
             const type = collectionTypeSelect.value;
             checkDetailsDiv.style.display = 'none';
             barterDetailsDiv.style.display = 'none';
-            
             if (type === 'Çek' || type === 'Senet') checkDetailsDiv.style.display = 'block';
             else if (type === 'Barter') {
                 barterDetailsDiv.style.display = 'block';
@@ -747,7 +750,7 @@
                 collectionExchangeRateInput.value = '1';
                 collectionExchangeRateGroup.style.display = 'none';
             }
-            collectionCurrencySelect.dispatchEvent(new Event('change')); // UI güncelle
+            collectionCurrencySelect.dispatchEvent(new Event('change'));
         });
 
         async function deleteFinancialItem(collectionName, docId, description) {
@@ -762,7 +765,6 @@
             }
         }
 
-        // FİNANSAL VERİLERİ YÜKLE VE AYRIŞTIR
         async function loadFinancialData(projectId) {
             try {
                 const projectDoc = await db.collection('projects').doc(projectId).get();
@@ -773,45 +775,29 @@
                     contractAmountTL = project.contractAmount * project.contractExchangeRate;
                 }
 
-                // Harcamaları Çek
                 const expensesSnapshot = await db.collection('projects').doc(projectId).collection('expenses').orderBy('date', 'desc').get();
-                let totalExpenses = 0;
-                let tExpResmi = 0;
-                let tExpGayri = 0;
-
+                let totalExpenses = 0, tExpResmi = 0, tExpGayri = 0;
                 if (!expensesSnapshot.empty) {
                     expensesSnapshot.forEach(doc => {
                         const d = doc.data();
                         totalExpenses += d.amountTL;
-                        // Kayıt türüne göre ayır
-                        if (d.recordType === 'Gayri Resmi') {
-                            tExpGayri += d.amountTL;
-                        } else {
-                            tExpResmi += d.amountTL;
-                        }
+                        if (d.recordType === 'Gayri Resmi') tExpGayri += d.amountTL;
+                        else tExpResmi += d.amountTL;
                     });
                 }
 
-                // Tahsilatları Çek
                 const collectionsSnapshot = await db.collection('projects').doc(projectId).collection('collections').orderBy('date', 'desc').get();
-                let totalCollections = 0;
-                let tColResmi = 0;
-                let tColGayri = 0;
-
+                let totalCollections = 0, tColResmi = 0, tColGayri = 0;
                 if (!collectionsSnapshot.empty) {
                     collectionsSnapshot.forEach(doc => {
                         const d = doc.data();
                         totalCollections += d.amountTL;
-                        // Kayıt türüne göre ayır
-                        if (d.recordType === 'Gayri Resmi') {
-                            tColGayri += d.amountTL;
-                        } else {
-                            tColResmi += d.amountTL;
-                        }
+                        if (d.recordType === 'Gayri Resmi') tColGayri += d.amountTL;
+                        else tColResmi += d.amountTL;
                     });
                 }
 
-                // Özet Kartlarını Doldur
+                // TL Değerlerini Yaz
                 totalExpensesTL.textContent = totalExpenses.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 totalExpensesResmi.textContent = tExpResmi.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 totalExpensesGayri.textContent = tExpGayri.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
@@ -824,6 +810,19 @@
                 remainingBalanceTL.textContent = remainingBalance.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 remainingBalanceTL.classList.remove('positive', 'negative');
                 remainingBalanceTL.classList.add(remainingBalance >= 0 ? 'positive' : 'negative');
+
+                // --- USD KARŞILIKLARINI HESAPLA VE YAZ (Bugünün Kuruyla) ---
+                const today = new Date().toISOString().split('T')[0];
+                const usdRate = await fetchCurrencyRates(today, 'USD');
+                
+                if (usdRate) {
+                    const toUSD = (tl) => (tl / usdRate).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+                    
+                    totalExpensesUSD.textContent = `(~${toUSD(totalExpenses)})`;
+                    totalCollectionsUSD.textContent = `(~${toUSD(totalCollections)})`;
+                    remainingBalanceUSD.textContent = `(~${toUSD(remainingBalance)})`;
+                }
+                // -----------------------------------------------------------
 
                 updateExpenseTable(expensesSnapshot);
                 updateCollectionTable(collectionsSnapshot);
@@ -844,15 +843,12 @@
             snapshot.forEach(doc => {
                 const d = doc.data();
                 const row = expenseListBody.insertRow();
-                
                 const dateStr = d.date.toDate ? d.date.toDate().toLocaleDateString('tr-TR') : 'N/A';
-                
                 row.insertCell(0).textContent = dateStr;
                 
-                // Tür Hücresi (Rozetli)
                 const typeCell = row.insertCell(1);
                 const typeSpan = document.createElement('span');
-                const typeVal = d.recordType || 'Resmi'; // Eski kayıtlarda yoksa 'Resmi' varsay
+                const typeVal = d.recordType || 'Resmi';
                 typeSpan.textContent = typeVal;
                 typeSpan.className = 'type-badge ' + (typeVal === 'Gayri Resmi' ? 'type-gayriresmi' : 'type-resmi');
                 typeCell.appendChild(typeSpan);
@@ -882,12 +878,9 @@
             snapshot.forEach(doc => {
                 const d = doc.data();
                 const row = collectionListBody.insertRow();
-                
                 const dateStr = d.date.toDate ? d.date.toDate().toLocaleDateString('tr-TR') : 'N/A';
-                
                 row.insertCell(0).textContent = dateStr;
 
-                // Tür Hücresi (Rozetli)
                 const typeCell = row.insertCell(1);
                 const typeSpan = document.createElement('span');
                 const typeVal = d.recordType || 'Resmi';
