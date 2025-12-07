@@ -3,17 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Banka & Finans İşlemleri</title>
+    <title>Banka & Finans - KeyForce</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
     <link rel="stylesheet" href="style.css">
+    <style>
+        .bank-grid { display: grid; grid-template-columns: 350px 1fr; gap: 25px; }
+        
+        .transaction-card {
+            background: #fff; padding: 25px; border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #e0e0e0;
+        }
+
+        /* İşlem Türü Butonları */
+        .type-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .type-btn {
+            padding: 12px; border: 1px solid #ddd; border-radius: 8px; background: #f8f9fa;
+            cursor: pointer; text-align: center; font-weight: 600; color: #555; transition: all 0.2s;
+            font-size: 0.9em;
+        }
+        .type-btn.active {
+            background-color: #e3f2fd; color: #0d47a1; border-color: #0d47a1;
+            box-shadow: 0 2px 5px rgba(13, 71, 161, 0.2);
+        }
+        .type-btn:hover { background-color: #eee; }
+
+        /* Dinamik Alanlar */
+        .dynamic-field { display: none; animation: fadeIn 0.3s ease; }
+        .dynamic-field.show { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Tablo Rozetleri */
+        .badge-op { padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: 600; }
+        .op-Giden { background: #fee2e2; color: #dc2626; }
+        .op-Gelen { background: #d1fae5; color: #059669; }
+        .op-Virman { background: #e0f2fe; color: #0284c7; }
+        .op-Döviz { background: #f3e8ff; color: #7c3aed; }
+
+        @media (max-width: 900px) { .bank-grid { grid-template-columns: 1fr; } }
+    </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Banka & Finans Operasyonları</h1>
+            <h1>Banka & Finans Merkezi</h1>
             <div class="header-right">
                 <span class="user-info">Hoş geldin, <span id="userEmail"></span>!</span>
                 <button onclick="window.location.href='index.html'" class="button secondary">Ana Menü</button>
@@ -22,71 +57,81 @@
 
         <div id="systemMessage" class="message"></div>
 
-        <div class="form-grid" style="grid-template-columns: 1fr 1fr; gap: 30px;">
+        <div class="bank-grid">
             
-            <div style="background:#fff; padding:20px; border-radius:8px; border:1px solid #ddd;">
-                <h3 class="section-subtitle" style="margin-top:0;">🔄 Virman (Transfer)</h3>
-                <p style="font-size:0.85em; color:#666; margin-bottom:15px;">Aynı para birimindeki hesaplar arası transfer.</p>
-                <form id="virmanForm">
+            <div class="transaction-card">
+                <h3 class="section-subtitle" style="margin-top:0;">Yeni Finansal İşlem</h3>
+                
+                <label style="font-weight:600; display:block; margin-bottom:10px;">İşlem Türü:</label>
+                <div class="type-selector">
+                    <div class="type-btn active" onclick="setOpType('Giden')">📤 Giden EFT/Havale<br><small>(Ödeme)</small></div>
+                    <div class="type-btn" onclick="setOpType('Gelen')">📥 Gelen EFT/Havale<br><small>(Tahsilat)</small></div>
+                    <div class="type-btn" onclick="setOpType('Virman')">🔄 Virman<br><small>(Transfer)</small></div>
+                    <div class="type-btn" onclick="setOpType('Döviz')">💱 Döviz İşlemi<br><small>(Al/Sat)</small></div>
+                </div>
+
+                <form id="bankForm" class="form-grid" style="grid-template-columns: 1fr;">
+                    <input type="hidden" id="opType" value="Giden">
+
                     <div class="form-group">
-                        <label>Çıkış Yapılacak Hesap:</label>
-                        <select id="vSource" required><option>Yükleniyor...</option></select>
+                        <label id="lblSource">Hangi Hesaptan Çıkacak:</label>
+                        <select id="accSource" required onchange="checkCurrencyMatch()"><option value="">Seçiniz...</option></select>
                     </div>
+
+                    <div class="form-group dynamic-field" id="divTargetAcc">
+                        <label>Hangi Hesaba Girecek:</label>
+                        <select id="accTarget" onchange="checkCurrencyMatch()"><option value="">Seçiniz...</option></select>
+                    </div>
+
+                    <div class="form-group dynamic-field show" id="divCari">
+                        <label id="lblCari">Kime Ödeniyor (Cari):</label>
+                        <select id="cariSelect"><option value="">Seçiniz...</option></select>
+                    </div>
+
                     <div class="form-group">
-                        <label>Giriş Yapılacak Hesap:</label>
-                        <select id="vTarget" required><option>Yükleniyor...</option></select>
+                        <label>İşlem Tutarı:</label>
+                        <input type="number" id="amount" step="0.01" required placeholder="0.00">
                     </div>
-                    <div class="form-group">
-                        <label>Tutar:</label>
-                        <input type="number" id="vAmount" step="0.01" required>
+
+                    <div class="form-group dynamic-field" id="divRate">
+                        <label>İşlem Kuru:</label>
+                        <input type="number" id="rate" step="0.0001" placeholder="1.0000">
+                        <small id="rateCalcInfo" style="color:#666;"></small>
                     </div>
+
                     <div class="form-group">
                         <label>Tarih:</label>
-                        <input type="date" id="vDate" required>
+                        <input type="date" id="date" required>
                     </div>
+
                     <div class="form-group">
                         <label>Açıklama:</label>
-                        <input type="text" id="vDesc" placeholder="Örn: Kasa devir">
+                        <input type="text" id="desc" placeholder="Örn: Fatura ödemesi, Maaş...">
                     </div>
-                    <button type="submit" class="button primary" style="width:100%">Transfer Yap</button>
+
+                    <button type="submit" class="button primary" style="width:100%; margin-top:10px;">İşlemi Onayla</button>
                 </form>
             </div>
 
-            <div style="background:#fff; padding:20px; border-radius:8px; border:1px solid #ddd;">
-                <h3 class="section-subtitle" style="margin-top:0;">💱 Döviz Alış/Satış</h3>
-                <p style="font-size:0.85em; color:#666; margin-bottom:15px;">Farklı para birimleri arası dönüşüm.</p>
-                <form id="fxForm">
-                    <div class="form-group">
-                        <label>Satılan (Çıkan) Hesap:</label>
-                        <select id="fxSource" required onchange="updateFxLabels()"><option>Yükleniyor...</option></select>
-                    </div>
-                    <div class="form-group">
-                        <label>Alınan (Giren) Hesap:</label>
-                        <select id="fxTarget" required onchange="updateFxLabels()"><option>Yükleniyor...</option></select>
-                    </div>
-                    <div class="form-group">
-                        <label id="lblFxAmount">Satılan Tutar (Çıkan Para):</label>
-                        <input type="number" id="fxAmount" step="0.01" required oninput="calcFx()">
-                    </div>
-                    <div class="form-group">
-                        <label>İşlem Kuru:</label>
-                        <input type="number" id="fxRate" step="0.0001" required oninput="calcFx()">
-                    </div>
-                    <div class="form-group">
-                        <label id="lblFxResult">Alınan Tutar (Hesaplanan):</label>
-                        <input type="number" id="fxResult" step="0.01" disabled style="background:#eee;">
-                    </div>
-                    <button type="submit" class="button primary" style="width:100%; background-color:#6f42c1;">Döviz İşlemini Kaydet</button>
-                </form>
+            <div>
+                <h3 class="section-subtitle" style="margin-top:0;">Son Banka Hareketleri</h3>
+                <div class="financial-table-container">
+                    <table class="financial-table">
+                        <thead>
+                            <tr>
+                                <th>Tarih</th>
+                                <th>Tür</th>
+                                <th>Açıklama</th>
+                                <th>Tutar</th>
+                                <th>Durum</th>
+                            </tr>
+                        </thead>
+                        <tbody id="moveList">
+                            <tr><td colspan="5" style="text-align:center;">Yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
-        </div>
-
-        <h3 class="section-subtitle" style="margin-top:40px;">Son Finansal Hareketler</h3>
-        <div class="financial-table-container">
-            <table class="financial-table">
-                <thead><tr><th>Tarih</th><th>İşlem</th><th>Çıkan Hesap</th><th>Giren Hesap</th><th>Tutar</th><th>Kur</th></tr></thead>
-                <tbody id="moveList"><tr><td colspan="6" style="text-align:center;">Yükleniyor...</td></tr></tbody>
-            </table>
         </div>
     </div>
 
@@ -103,152 +148,223 @@
         const auth = firebase.auth();
         const db = firebase.firestore();
         let currentUserId = null;
-        let accountsData = [];
+        let accountsMap = {}; // Hesap ID -> Data
 
         auth.onAuthStateChanged(user => {
             if (user) {
                 currentUserId = user.uid;
                 document.getElementById('userEmail').textContent = user.email;
-                document.getElementById('vDate').value = new Date().toISOString().split('T')[0];
-                loadAccounts();
-                loadMoves();
+                document.getElementById('date').value = new Date().toISOString().split('T')[0];
+                loadData();
             } else { window.location.href = 'auth.html'; }
         });
 
-        function showMessage(msg) { alert(msg); } // Basit uyarı
+        function showMessage(msg, isError=false) {
+            const el = document.getElementById('systemMessage');
+            el.textContent = msg;
+            el.className = 'message ' + (isError ? 'error-message' : 'success');
+            el.classList.add('show');
+            setTimeout(() => el.classList.remove('show'), 3000);
+        }
 
-        async function loadAccounts() {
-            const snap = await db.collection('accounts').where('ownerId', '==', currentUserId).get();
+        // --- ARAYÜZ YÖNETİMİ ---
+        function setOpType(type) {
+            document.getElementById('opType').value = type;
+            
+            // Butonların aktifliğini değiştir
+            document.querySelectorAll('.type-btn').forEach(btn => btn.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+
+            // Alanları Göster/Gizle
+            const divCari = document.getElementById('divCari');
+            const divTarget = document.getElementById('divTargetAcc');
+            const divRate = document.getElementById('divRate');
+            const lblSource = document.getElementById('lblSource');
+            const lblCari = document.getElementById('lblCari');
+
+            divCari.className = 'form-group dynamic-field'; // Gizle
+            divTarget.className = 'form-group dynamic-field';
+            divRate.className = 'form-group dynamic-field';
+
+            if (type === 'Giden') {
+                lblSource.textContent = "Hangi Hesaptan Ödendi:";
+                lblCari.textContent = "Kime Ödendi (Cari):";
+                divCari.classList.add('show');
+            } 
+            else if (type === 'Gelen') {
+                lblSource.textContent = "Hangi Hesaba Geldi:"; // Aslında bu Target mantığı ama tek dropdown kullanıyoruz
+                lblCari.textContent = "Kimden Geldi (Cari):";
+                divCari.classList.add('show');
+            }
+            else if (type === 'Virman') {
+                lblSource.textContent = "Çıkış Yapılacak Hesap:";
+                divTarget.classList.add('show');
+            }
+            else if (type === 'Döviz') {
+                lblSource.textContent = "Satılan (Çıkan) Hesap:";
+                divTarget.classList.add('show');
+                divRate.classList.add('show');
+            }
+        }
+
+        async function loadData() {
+            // 1. Hesapları Yükle
+            const accSnap = await db.collection('accounts').where('ownerId','==',currentUserId).get();
             let opts = '<option value="">Seçiniz...</option>';
-            accountsData = [];
-            snap.forEach(doc => {
+            accountsMap = {};
+            accSnap.forEach(doc => {
                 const d = doc.data();
-                accountsData.push({ id: doc.id, ...d });
-                opts += `<option value="${doc.id}" data-curr="${d.currency}">${d.name} (${d.currency}) - ${d.balance}</option>`;
+                accountsMap[doc.id] = d;
+                opts += `<option value="${doc.id}">${d.name} (${d.currency}) - ${d.balance}</option>`;
             });
-            
-            // Tüm selectleri doldur
-            ['vSource', 'vTarget', 'fxSource', 'fxTarget'].forEach(id => {
-                document.getElementById(id).innerHTML = opts;
+            document.getElementById('accSource').innerHTML = opts;
+            document.getElementById('accTarget').innerHTML = opts;
+
+            // 2. Carileri Yükle
+            const entSnap = await db.collection('entities').where('ownerId','==',currentUserId).orderBy('name').get();
+            let cariOpts = '<option value="">Seçiniz...</option>';
+            entSnap.forEach(doc => {
+                cariOpts += `<option value="${doc.id}">${doc.data().name}</option>`;
             });
+            document.getElementById('cariSelect').innerHTML = cariOpts;
+
+            // 3. Hareketleri Yükle
+            loadMoves();
         }
 
-        // --- VİRMAN İŞLEMİ ---
-        document.getElementById('virmanForm').addEventListener('submit', async (e) => {
+        // --- İŞLEM KAYDI (BEYİN) ---
+        document.getElementById('bankForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const sId = document.getElementById('vSource').value;
-            const tId = document.getElementById('vTarget').value;
-            const amount = parseFloat(document.getElementById('vAmount').value);
-            const date = document.getElementById('vDate').value;
-            const desc = document.getElementById('vDesc').value;
-
-            if(sId === tId) return showMessage('Aynı hesaba virman yapılamaz.');
+            const type = document.getElementById('opType').value;
+            const amount = parseFloat(document.getElementById('amount').value);
+            const date = document.getElementById('date').value;
+            const desc = document.getElementById('desc').value;
+            const sId = document.getElementById('accSource').value; // Source ID (veya Gelen için Target ID)
             
-            // Para birimi kontrolü
-            const sAcc = accountsData.find(a => a.id === sId);
-            const tAcc = accountsData.find(a => a.id === tId);
-            if(sAcc.currency !== tAcc.currency) return showMessage(`Para birimleri farklı! (${sAcc.currency} -> ${tAcc.currency}). Lütfen Döviz İşlemi kullanın.`);
+            if(!sId || amount <= 0) return showMessage('Eksik bilgi.', true);
+
+            const batch = db.batch();
+            const dateObj = firebase.firestore.Timestamp.fromDate(new Date(date));
+            const logRef = db.collection('bank_transactions').doc();
 
             try {
-                const batch = db.batch();
-                // Çıkan
-                batch.update(db.collection('accounts').doc(sId), { balance: firebase.firestore.FieldValue.increment(-amount) });
-                // Giren
-                batch.update(db.collection('accounts').doc(tId), { balance: firebase.firestore.FieldValue.increment(amount) });
-                
-                // Kayıt
-                const logRef = db.collection('bank_transactions').doc();
-                batch.set(logRef, {
-                    ownerId: currentUserId, type: 'Virman',
-                    sourceId: sId, sourceName: sAcc.name,
-                    targetId: tId, targetName: tAcc.name,
-                    amount: amount, currency: sAcc.currency,
-                    description: desc,
-                    date: firebase.firestore.Timestamp.fromDate(new Date(date)),
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
+                // Senaryolar
+                if (type === 'Giden') {
+                    // Hesaptan Çıkış (-), Cariye Alacak (+/Ödeme)
+                    const cId = document.getElementById('cariSelect').value;
+                    if(!cId) return showMessage('Cari seçmelisiniz.', true);
+                    
+                    const cariName = document.getElementById('cariSelect').options[document.getElementById('cariSelect').selectedIndex].text;
+                    const accName = accountsMap[sId].name;
+
+                    // Banka Hareketi
+                    batch.set(logRef, {
+                        ownerId: currentUserId, type: 'Giden', amount: amount, currency: accountsMap[sId].currency,
+                        sourceId: sId, sourceName: accName, targetId: cId, targetName: cariName, // Target burada Cari oluyor
+                        description: desc || 'Giden Transfer', date: dateObj, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    // Bakiye Güncellemeleri
+                    batch.update(db.collection('accounts').doc(sId), { balance: firebase.firestore.FieldValue.increment(-amount) });
+                    batch.update(db.collection('entities').doc(cId), { balance: firebase.firestore.FieldValue.increment(-amount) }); // Carinin alacağı düşer/borcu artar? (Biz ödedik, borç düşer)
+                    
+                    // Cari Ekstresi için Transaction
+                    const entTransRef = db.collection('entity_transactions').doc();
+                    batch.set(entTransRef, {
+                        ownerId: currentUserId, entityId: cId, type: 'Alacaklandık', // Biz ödedik
+                        amount: amount, description: `Banka Ödemesi (${accName})`, date: dateObj, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                } 
+                else if (type === 'Gelen') {
+                    // Hesaba Giriş (+), Cariden Düşüş (Alacak Düşer)
+                    // Burada accSource aslında paranın GİRDİĞİ hesap oluyor (UI kolaylığı için)
+                    const cId = document.getElementById('cariSelect').value;
+                    if(!cId) return showMessage('Cari seçmelisiniz.', true);
+
+                    const cariName = document.getElementById('cariSelect').options[document.getElementById('cariSelect').selectedIndex].text;
+                    const accName = accountsMap[sId].name;
+
+                    batch.set(logRef, {
+                        ownerId: currentUserId, type: 'Gelen', amount: amount, currency: accountsMap[sId].currency,
+                        sourceId: cId, sourceName: cariName, targetId: sId, targetName: accName,
+                        description: desc || 'Gelen Transfer', date: dateObj, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    batch.update(db.collection('accounts').doc(sId), { balance: firebase.firestore.FieldValue.increment(amount) });
+                    batch.update(db.collection('entities').doc(cId), { balance: firebase.firestore.FieldValue.increment(-amount) }); // Carinin borcu düşer (Alacağı artar mı? Hayır, bize ödedi, borcu azaldı)
+                    
+                    const entTransRef = db.collection('entity_transactions').doc();
+                    batch.set(entTransRef, {
+                        ownerId: currentUserId, entityId: cId, type: 'Tahsilat', 
+                        amount: amount, description: `Banka Tahsilatı (${accName})`, date: dateObj, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+                else if (type === 'Virman') {
+                    const tId = document.getElementById('accTarget').value;
+                    if(sId === tId) return showMessage('Aynı hesaba virman olmaz.', true);
+                    if(accountsMap[sId].currency !== accountsMap[tId].currency) return showMessage('Para birimleri farklı! Döviz işlemini kullanın.', true);
+
+                    batch.set(logRef, {
+                        ownerId: currentUserId, type: 'Virman', amount: amount, currency: accountsMap[sId].currency,
+                        sourceId: sId, sourceName: accountsMap[sId].name, targetId: tId, targetName: accountsMap[tId].name,
+                        description: desc || 'Virman', date: dateObj, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    batch.update(db.collection('accounts').doc(sId), { balance: firebase.firestore.FieldValue.increment(-amount) });
+                    batch.update(db.collection('accounts').doc(tId), { balance: firebase.firestore.FieldValue.increment(amount) });
+                }
+                else if (type === 'Döviz') {
+                    const tId = document.getElementById('accTarget').value;
+                    const rate = parseFloat(document.getElementById('rate').value);
+                    if(!rate) return showMessage('Kur giriniz.', true);
+                    
+                    const amountIn = amount * rate; // Basit hesap: Çıkan * Kur = Giren
+
+                    batch.set(logRef, {
+                        ownerId: currentUserId, type: 'Döviz', amount: amount, currency: accountsMap[sId].currency,
+                        sourceId: sId, sourceName: accountsMap[sId].name, targetId: tId, targetName: accountsMap[tId].name,
+                        rate: rate, amountIn: amountIn, currencyIn: accountsMap[tId].currency,
+                        description: desc || 'Döviz Bozdurma/Alma', date: dateObj, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    batch.update(db.collection('accounts').doc(sId), { balance: firebase.firestore.FieldValue.increment(-amount) });
+                    batch.update(db.collection('accounts').doc(tId), { balance: firebase.firestore.FieldValue.increment(amountIn) });
+                }
 
                 await batch.commit();
-                showMessage('Virman yapıldı.');
-                document.getElementById('virmanForm').reset();
-                loadAccounts(); loadMoves();
-            } catch (err) { showMessage(err.message); }
+                showMessage('İşlem başarıyla kaydedildi!');
+                document.getElementById('bankForm').reset();
+                document.getElementById('date').value = new Date().toISOString().split('T')[0];
+                loadData(); // Tabloyu ve bakiyeleri yenile
+
+            } catch (err) { showMessage('Hata: ' + err.message, true); }
         });
 
-        // --- DÖVİZ (FX) HESAPLAMA ---
-        function updateFxLabels() {
-            const sId = document.getElementById('fxSource').value;
-            const tId = document.getElementById('fxTarget').value;
-            if(!sId || !tId) return;
-            const sAcc = accountsData.find(a => a.id === sId);
-            const tAcc = accountsData.find(a => a.id === tId);
-            document.getElementById('lblFxAmount').textContent = `Satılan Tutar (${sAcc.currency}):`;
-            document.getElementById('lblFxResult').textContent = `Alınan Tutar (${tAcc.currency}):`;
+        // Yardımcı: Kur kontrolü (Opsiyonel görsel uyarı)
+        function checkCurrencyMatch() {
+            // ... (Kullanıcı dostu uyarılar eklenebilir)
         }
-
-        function calcFx() {
-            const amt = parseFloat(document.getElementById('fxAmount').value) || 0;
-            const rate = parseFloat(document.getElementById('fxRate').value) || 0;
-            document.getElementById('fxResult').value = (amt * rate).toFixed(2);
-        }
-
-        // --- DÖVİZ İŞLEMİ ---
-        document.getElementById('fxForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const sId = document.getElementById('fxSource').value;
-            const tId = document.getElementById('fxTarget').value;
-            const amountOut = parseFloat(document.getElementById('fxAmount').value); // Çıkan
-            const rate = parseFloat(document.getElementById('fxRate').value);
-            const amountIn = parseFloat(document.getElementById('fxResult').value); // Giren
-
-            if(sId === tId) return showMessage('Hesaplar farklı olmalı.');
-
-            try {
-                const batch = db.batch();
-                batch.update(db.collection('accounts').doc(sId), { balance: firebase.firestore.FieldValue.increment(-amountOut) });
-                batch.update(db.collection('accounts').doc(tId), { balance: firebase.firestore.FieldValue.increment(amountIn) });
-
-                const logRef = db.collection('bank_transactions').doc();
-                const sAcc = accountsData.find(a => a.id === sId);
-                const tAcc = accountsData.find(a => a.id === tId);
-
-                batch.set(logRef, {
-                    ownerId: currentUserId, type: 'Döviz İşlemi',
-                    sourceId: sId, sourceName: sAcc.name,
-                    targetId: tId, targetName: tAcc.name,
-                    amountOut: amountOut, currencyOut: sAcc.currency,
-                    amountIn: amountIn, currencyIn: tAcc.currency,
-                    rate: rate,
-                    date: firebase.firestore.Timestamp.now(),
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-
-                await batch.commit();
-                showMessage('Döviz işlemi tamamlandı.');
-                document.getElementById('fxForm').reset();
-                loadAccounts(); loadMoves();
-            } catch (err) { showMessage(err.message); }
-        });
 
         async function loadMoves() {
-            const snap = await db.collection('bank_transactions').where('ownerId', '==', currentUserId).orderBy('date', 'desc').limit(20).get();
-            const tbody = document.getElementById('moveList');
-            tbody.innerHTML = '';
+            const snap = await db.collection('bank_transactions').where('ownerId','==',currentUserId).orderBy('date','desc').limit(20).get();
+            const list = document.getElementById('moveList');
+            list.innerHTML = '';
+            if(snap.empty) { list.innerHTML = '<tr><td colspan="5" style="text-align:center;">İşlem yok.</td></tr>'; return; }
+
             snap.forEach(doc => {
                 const d = doc.data();
-                const row = tbody.insertRow();
+                const row = list.insertRow();
                 row.insertCell(0).textContent = d.date.toDate().toLocaleDateString('tr-TR');
-                row.insertCell(1).innerHTML = `<b>${d.type}</b>`;
-                row.insertCell(2).textContent = d.sourceName;
-                row.insertCell(3).textContent = d.targetName;
+                row.insertCell(1).innerHTML = `<span class="badge-op op-${d.type}">${d.type}</span>`;
+                row.insertCell(2).innerHTML = `${d.description} <br> <small style="color:#666;">${d.sourceName} -> ${d.targetName}</small>`;
                 
-                if (d.type === 'Virman') {
-                    row.insertCell(4).textContent = d.amount + ' ' + d.currency;
-                    row.insertCell(5).textContent = '-';
-                } else {
-                    row.insertCell(4).innerHTML = `<span style="color:red">-${d.amountOut} ${d.currencyOut}</span> <br> <span style="color:green">+${d.amountIn} ${d.currencyIn}</span>`;
-                    row.insertCell(5).textContent = d.rate;
-                }
+                let amountStr = '';
+                if(d.type === 'Döviz') amountStr = `-${d.amount} ${d.currency} <br> +${d.amountIn.toFixed(2)} ${d.currencyIn}`;
+                else amountStr = `${d.amount.toLocaleString('tr-TR')} ${d.currency}`;
+                
+                row.insertCell(3).innerHTML = amountStr;
+                row.insertCell(4).textContent = "Tamamlandı";
             });
         }
     </script>
