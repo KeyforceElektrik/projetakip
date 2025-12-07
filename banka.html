@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Banka & Finans İşlemleri</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Banka & Finans Operasyonları</h1>
+            <div class="header-right">
+                <span class="user-info">Hoş geldin, <span id="userEmail"></span>!</span>
+                <button onclick="window.location.href='index.html'" class="button secondary">Ana Menü</button>
+            </div>
+        </header>
+
+        <div id="systemMessage" class="message"></div>
+
+        <div class="form-grid" style="grid-template-columns: 1fr 1fr; gap: 30px;">
+            
+            <div style="background:#fff; padding:20px; border-radius:8px; border:1px solid #ddd;">
+                <h3 class="section-subtitle" style="margin-top:0;">🔄 Virman (Transfer)</h3>
+                <p style="font-size:0.85em; color:#666; margin-bottom:15px;">Aynı para birimindeki hesaplar arası transfer.</p>
+                <form id="virmanForm">
+                    <div class="form-group">
+                        <label>Çıkış Yapılacak Hesap:</label>
+                        <select id="vSource" required><option>Yükleniyor...</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Giriş Yapılacak Hesap:</label>
+                        <select id="vTarget" required><option>Yükleniyor...</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Tutar:</label>
+                        <input type="number" id="vAmount" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Tarih:</label>
+                        <input type="date" id="vDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Açıklama:</label>
+                        <input type="text" id="vDesc" placeholder="Örn: Kasa devir">
+                    </div>
+                    <button type="submit" class="button primary" style="width:100%">Transfer Yap</button>
+                </form>
+            </div>
+
+            <div style="background:#fff; padding:20px; border-radius:8px; border:1px solid #ddd;">
+                <h3 class="section-subtitle" style="margin-top:0;">💱 Döviz Alış/Satış</h3>
+                <p style="font-size:0.85em; color:#666; margin-bottom:15px;">Farklı para birimleri arası dönüşüm.</p>
+                <form id="fxForm">
+                    <div class="form-group">
+                        <label>Satılan (Çıkan) Hesap:</label>
+                        <select id="fxSource" required onchange="updateFxLabels()"><option>Yükleniyor...</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Alınan (Giren) Hesap:</label>
+                        <select id="fxTarget" required onchange="updateFxLabels()"><option>Yükleniyor...</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label id="lblFxAmount">Satılan Tutar (Çıkan Para):</label>
+                        <input type="number" id="fxAmount" step="0.01" required oninput="calcFx()">
+                    </div>
+                    <div class="form-group">
+                        <label>İşlem Kuru:</label>
+                        <input type="number" id="fxRate" step="0.0001" required oninput="calcFx()">
+                    </div>
+                    <div class="form-group">
+                        <label id="lblFxResult">Alınan Tutar (Hesaplanan):</label>
+                        <input type="number" id="fxResult" step="0.01" disabled style="background:#eee;">
+                    </div>
+                    <button type="submit" class="button primary" style="width:100%; background-color:#6f42c1;">Döviz İşlemini Kaydet</button>
+                </form>
+            </div>
+        </div>
+
+        <h3 class="section-subtitle" style="margin-top:40px;">Son Finansal Hareketler</h3>
+        <div class="financial-table-container">
+            <table class="financial-table">
+                <thead><tr><th>Tarih</th><th>İşlem</th><th>Çıkan Hesap</th><th>Giren Hesap</th><th>Tutar</th><th>Kur</th></tr></thead>
+                <tbody id="moveList"><tr><td colspan="6" style="text-align:center;">Yükleniyor...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBNwSpbpNuQQ4nTjDAlB6izu5IgkEZxDL0",
+            authDomain: "projetakip-e3a75.firebaseapp.com",
+            projectId: "projetakip-e3a75",
+            storageBucket: "projetakip-e3a75.firebasestorage.app",
+            messagingSenderId: "924120275674",
+            appId: "1:924120275674:web:c8ad3d4c998333d9fd23e3"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        let currentUserId = null;
+        let accountsData = [];
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                currentUserId = user.uid;
+                document.getElementById('userEmail').textContent = user.email;
+                document.getElementById('vDate').value = new Date().toISOString().split('T')[0];
+                loadAccounts();
+                loadMoves();
+            } else { window.location.href = 'auth.html'; }
+        });
+
+        function showMessage(msg) { alert(msg); } // Basit uyarı
+
+        async function loadAccounts() {
+            const snap = await db.collection('accounts').where('ownerId', '==', currentUserId).get();
+            let opts = '<option value="">Seçiniz...</option>';
+            accountsData = [];
+            snap.forEach(doc => {
+                const d = doc.data();
+                accountsData.push({ id: doc.id, ...d });
+                opts += `<option value="${doc.id}" data-curr="${d.currency}">${d.name} (${d.currency}) - ${d.balance}</option>`;
+            });
+            
+            // Tüm selectleri doldur
+            ['vSource', 'vTarget', 'fxSource', 'fxTarget'].forEach(id => {
+                document.getElementById(id).innerHTML = opts;
+            });
+        }
+
+        // --- VİRMAN İŞLEMİ ---
+        document.getElementById('virmanForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const sId = document.getElementById('vSource').value;
+            const tId = document.getElementById('vTarget').value;
+            const amount = parseFloat(document.getElementById('vAmount').value);
+            const date = document.getElementById('vDate').value;
+            const desc = document.getElementById('vDesc').value;
+
+            if(sId === tId) return showMessage('Aynı hesaba virman yapılamaz.');
+            
+            // Para birimi kontrolü
+            const sAcc = accountsData.find(a => a.id === sId);
+            const tAcc = accountsData.find(a => a.id === tId);
+            if(sAcc.currency !== tAcc.currency) return showMessage(`Para birimleri farklı! (${sAcc.currency} -> ${tAcc.currency}). Lütfen Döviz İşlemi kullanın.`);
+
+            try {
+                const batch = db.batch();
+                // Çıkan
+                batch.update(db.collection('accounts').doc(sId), { balance: firebase.firestore.FieldValue.increment(-amount) });
+                // Giren
+                batch.update(db.collection('accounts').doc(tId), { balance: firebase.firestore.FieldValue.increment(amount) });
+                
+                // Kayıt
+                const logRef = db.collection('bank_transactions').doc();
+                batch.set(logRef, {
+                    ownerId: currentUserId, type: 'Virman',
+                    sourceId: sId, sourceName: sAcc.name,
+                    targetId: tId, targetName: tAcc.name,
+                    amount: amount, currency: sAcc.currency,
+                    description: desc,
+                    date: firebase.firestore.Timestamp.fromDate(new Date(date)),
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                await batch.commit();
+                showMessage('Virman yapıldı.');
+                document.getElementById('virmanForm').reset();
+                loadAccounts(); loadMoves();
+            } catch (err) { showMessage(err.message); }
+        });
+
+        // --- DÖVİZ (FX) HESAPLAMA ---
+        function updateFxLabels() {
+            const sId = document.getElementById('fxSource').value;
+            const tId = document.getElementById('fxTarget').value;
+            if(!sId || !tId) return;
+            const sAcc = accountsData.find(a => a.id === sId);
+            const tAcc = accountsData.find(a => a.id === tId);
+            document.getElementById('lblFxAmount').textContent = `Satılan Tutar (${sAcc.currency}):`;
+            document.getElementById('lblFxResult').textContent = `Alınan Tutar (${tAcc.currency}):`;
+        }
+
+        function calcFx() {
+            const amt = parseFloat(document.getElementById('fxAmount').value) || 0;
+            const rate = parseFloat(document.getElementById('fxRate').value) || 0;
+            document.getElementById('fxResult').value = (amt * rate).toFixed(2);
+        }
+
+        // --- DÖVİZ İŞLEMİ ---
+        document.getElementById('fxForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const sId = document.getElementById('fxSource').value;
+            const tId = document.getElementById('fxTarget').value;
+            const amountOut = parseFloat(document.getElementById('fxAmount').value); // Çıkan
+            const rate = parseFloat(document.getElementById('fxRate').value);
+            const amountIn = parseFloat(document.getElementById('fxResult').value); // Giren
+
+            if(sId === tId) return showMessage('Hesaplar farklı olmalı.');
+
+            try {
+                const batch = db.batch();
+                batch.update(db.collection('accounts').doc(sId), { balance: firebase.firestore.FieldValue.increment(-amountOut) });
+                batch.update(db.collection('accounts').doc(tId), { balance: firebase.firestore.FieldValue.increment(amountIn) });
+
+                const logRef = db.collection('bank_transactions').doc();
+                const sAcc = accountsData.find(a => a.id === sId);
+                const tAcc = accountsData.find(a => a.id === tId);
+
+                batch.set(logRef, {
+                    ownerId: currentUserId, type: 'Döviz İşlemi',
+                    sourceId: sId, sourceName: sAcc.name,
+                    targetId: tId, targetName: tAcc.name,
+                    amountOut: amountOut, currencyOut: sAcc.currency,
+                    amountIn: amountIn, currencyIn: tAcc.currency,
+                    rate: rate,
+                    date: firebase.firestore.Timestamp.now(),
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                await batch.commit();
+                showMessage('Döviz işlemi tamamlandı.');
+                document.getElementById('fxForm').reset();
+                loadAccounts(); loadMoves();
+            } catch (err) { showMessage(err.message); }
+        });
+
+        async function loadMoves() {
+            const snap = await db.collection('bank_transactions').where('ownerId', '==', currentUserId).orderBy('date', 'desc').limit(20).get();
+            const tbody = document.getElementById('moveList');
+            tbody.innerHTML = '';
+            snap.forEach(doc => {
+                const d = doc.data();
+                const row = tbody.insertRow();
+                row.insertCell(0).textContent = d.date.toDate().toLocaleDateString('tr-TR');
+                row.insertCell(1).innerHTML = `<b>${d.type}</b>`;
+                row.insertCell(2).textContent = d.sourceName;
+                row.insertCell(3).textContent = d.targetName;
+                
+                if (d.type === 'Virman') {
+                    row.insertCell(4).textContent = d.amount + ' ' + d.currency;
+                    row.insertCell(5).textContent = '-';
+                } else {
+                    row.insertCell(4).innerHTML = `<span style="color:red">-${d.amountOut} ${d.currencyOut}</span> <br> <span style="color:green">+${d.amountIn} ${d.currencyIn}</span>`;
+                    row.insertCell(5).textContent = d.rate;
+                }
+            });
+        }
+    </script>
+</body>
+</html>
