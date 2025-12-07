@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personel Yönetimi</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Personel Yönetimi</h1>
+            <div class="header-right">
+                <span class="user-info">Hoş geldin!</span>
+                <button onclick="window.location.href='index.html'" class="button secondary">Ana Menü</button>
+            </div>
+        </header>
+
+        <div id="systemMessage" class="message"></div>
+
+        <div class="form-grid">
+            <div style="background:#fff; padding:20px; border-radius:8px; border:1px solid #ddd;">
+                <h3 class="section-subtitle" style="margin-top:0;">Yeni Personel Kartı</h3>
+                <form id="addStaffForm">
+                    <div class="form-group">
+                        <label>Adı Soyadı:</label>
+                        <input type="text" id="staffName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Görevi:</label>
+                        <input type="text" id="staffRole" placeholder="Mimar, Usta vb.">
+                    </div>
+                    <div class="form-group">
+                        <label>Maaş (Bilgi Amaçlı):</label>
+                        <input type="number" id="staffSalary" placeholder="TL">
+                    </div>
+                    <button type="submit" class="button primary" style="width:100%; margin-top:10px;">Kaydet</button>
+                </form>
+            </div>
+
+            <div style="background:#fff; padding:20px; border-radius:8px; border:1px solid #ddd;">
+                <h3 class="section-subtitle" style="margin-top:0;">Personel İşlemi</h3>
+                <form id="staffTransForm">
+                    <div class="form-group">
+                        <label>Personel Seç:</label>
+                        <select id="staffSelect" required><option>Yükleniyor...</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label>İşlem Türü:</label>
+                        <select id="transType" onchange="toggleWalletSelect()">
+                            <option value="Maaş Tahakkuk">Maaş Tahakkuku (Borçlanma)</option>
+                            <option value="Ödeme">Ödeme / Avans (Kasadan Çıkış)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="walletDiv" style="display:none;">
+                        <label>Hangi Kasadan/Bankadan:</label>
+                        <select id="walletSelect"><option>Yükleniyor...</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Tutar (TL):</label>
+                        <input type="number" id="transAmount" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Açıklama:</label>
+                        <input type="text" id="transDesc" placeholder="Örn: Kasım Maaşı, Elden Avans">
+                    </div>
+                    <button type="submit" class="button primary" style="width:100%; margin-top:10px;">İşlemi Kaydet</button>
+                </form>
+            </div>
+        </div>
+
+        <h2 class="section-title">Personel Listesi ve Bakiyeler</h2>
+        <div class="financial-table-container">
+            <table class="financial-table index-table">
+                <thead><tr><th>Personel</th><th>Görevi</th><th>Durum (Bizim Borcumuz)</th><th>İşlem</th></tr></thead>
+                <tbody id="staffList"><tr><td colspan="4" style="text-align:center;">Yükleniyor...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBNwSpbpNuQQ4nTjDAlB6izu5IgkEZxDL0",
+            authDomain: "projetakip-e3a75.firebaseapp.com",
+            projectId: "projetakip-e3a75",
+            storageBucket: "projetakip-e3a75.firebasestorage.app",
+            messagingSenderId: "924120275674",
+            appId: "1:924120275674:web:c8ad3d4c998333d9fd23e3"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        let currentUserId = null;
+
+        auth.onAuthStateChanged(user => {
+            if(user) { currentUserId = user.uid; loadStaff(); loadWallets(); }
+            else window.location.href='auth.html';
+        });
+
+        function showMessage(msg) { document.getElementById('systemMessage').textContent = msg; document.getElementById('systemMessage').classList.add('show'); setTimeout(()=>document.getElementById('systemMessage').classList.remove('show'),3000); }
+
+        function toggleWalletSelect() {
+            const type = document.getElementById('transType').value;
+            // Eğer ödeme yapıyorsak kasa seçilmeli, maaş tahakkuku ise kasadan para çıkmaz sadece borç yazarız.
+            document.getElementById('walletDiv').style.display = (type === 'Ödeme') ? 'block' : 'none';
+        }
+
+        // PERSONEL YÜKLE
+        async function loadStaff() {
+            const snap = await db.collection('personnel').where('ownerId','==',currentUserId).get();
+            const list = document.getElementById('staffList');
+            const select = document.getElementById('staffSelect');
+            list.innerHTML = '';
+            select.innerHTML = '<option value="">Seçiniz...</option>';
+            
+            snap.forEach(doc => {
+                const d = doc.data();
+                select.innerHTML += `<option value="${doc.id}">${d.name}</option>`;
+                
+                const bal = d.balance || 0;
+                list.innerHTML += `
+                    <tr>
+                        <td><strong>${d.name}</strong></td>
+                        <td>${d.role}</td>
+                        <td style="color:${bal > 0 ? '#dc3545' : '#28a745'}; font-weight:bold;">
+                            ${bal.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})}
+                        </td>
+                        <td><button class="delete-btn" onclick="deleteStaff('${doc.id}')">Sil</button></td>
+                    </tr>
+                `;
+            });
+        }
+
+        // KASA YÜKLE
+        async function loadWallets() {
+            const snap = await db.collection('accounts').where('ownerId','==',currentUserId).get();
+            const sel = document.getElementById('walletSelect');
+            sel.innerHTML = '<option value="">Seçiniz...</option>';
+            snap.forEach(doc => sel.innerHTML += `<option value="${doc.id}">${doc.data().name} (${doc.data().currency})</option>`);
+        }
+
+        // PERSONEL KAYDET
+        document.getElementById('addStaffForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            try {
+                await db.collection('personnel').add({
+                    ownerId: currentUserId,
+                    name: document.getElementById('staffName').value,
+                    role: document.getElementById('staffRole').value,
+                    salary: parseFloat(document.getElementById('staffSalary').value) || 0,
+                    balance: 0,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                showMessage('Personel eklendi.');
+                document.getElementById('addStaffForm').reset();
+                loadStaff();
+            } catch(e) { showMessage(e.message); }
+        });
+
+        // İŞLEM KAYDET
+        document.getElementById('staffTransForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const staffId = document.getElementById('staffSelect').value;
+            const type = document.getElementById('transType').value;
+            const amount = parseFloat(document.getElementById('transAmount').value);
+            const desc = document.getElementById('transDesc').value;
+            const walletId = document.getElementById('walletSelect').value;
+
+            if(!staffId) return;
+            if(type === 'Ödeme' && !walletId) return showMessage('Kasa seçmelisiniz.');
+
+            try {
+                const batch = db.batch();
+                const staffRef = db.collection('personnel').doc(staffId);
+                
+                // Maaş Tahakkuk: Personele borçlandık (+ Bakiye)
+                // Ödeme: Personele ödedik (- Bakiye)
+                const change = (type === 'Maaş Tahakkuk') ? amount : -amount;
+                
+                batch.update(staffRef, { balance: firebase.firestore.FieldValue.increment(change) });
+
+                // Ödeme ise kasadan düş
+                if(type === 'Ödeme') {
+                    batch.update(db.collection('accounts').doc(walletId), { balance: firebase.firestore.FieldValue.increment(-amount) });
+                }
+
+                // Hareket kaydı (İstersen ayrı tablo açabilirsin, şimdilik basit tuttum)
+                // Detaylı log için 'personnel_transactions' tablosu açılabilir.
+
+                await batch.commit();
+                showMessage('İşlem kaydedildi.');
+                loadStaff();
+            } catch(e) { showMessage(e.message); }
+        });
+        
+        window.deleteStaff = async (id) => { if(confirm('Silinsin mi?')) { await db.collection('personnel').doc(id).delete(); loadStaff(); } };
+    </script>
+</body>
+</html>
