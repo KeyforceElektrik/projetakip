@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Çek & Senet Takip - KeyForce</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .check-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .check-card {
+            background: #fff; padding: 15px; border-radius: 8px;
+            border-left: 5px solid #ccc; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            position: relative; transition: transform 0.2s;
+        }
+        .check-card:hover { transform: translateY(-3px); }
+        .check-received { border-left-color: #28a745; } /* Alınan Çek */
+        .check-given { border-left-color: #dc3545; }    /* Verilen Çek */
+        
+        .check-header { display: flex; justify-content: space-between; margin-bottom: 10px; font-weight: 600; font-size: 1.1em; }
+        .check-row { display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 5px; color: #555; }
+        .check-status { position: absolute; top: 15px; right: 15px; font-size: 0.75em; padding: 2px 6px; border-radius: 4px; background: #eee; }
+        
+        .status-portföyde { background: #fff3cd; color: #856404; }
+        .status-tahsiledildi { background: #d4edda; color: #155724; }
+        .status-ciroedildi { background: #d1ecf1; color: #0c5460; }
+        .status-ödendi { background: #d4edda; color: #155724; }
+        .status-karşılıksız { background: #f8d7da; color: #721c24; }
+
+        .filter-bar { margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+        
+        /* Modal Stilleri */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+        .modal-content { background-color: #fefefe; margin: 10% auto; padding: 25px; border: 1px solid #888; width: 90%; max-width: 450px; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        
+        .btn-ciro { background-color: #17a2b8; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.85em; }
+        .btn-ciro:hover { background-color: #138496; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Çek & Senet Portföyü</h1>
+            <div class="header-right">
+                <span class="user-info">Hoş geldin, <span id="userEmail"></span>!</span>
+                <button onclick="window.location.href='index.html'" class="button secondary">Ana Menü</button>
+            </div>
+        </header>
+
+        <div id="systemMessage" class="message"></div>
+
+        <div style="background:#fff; padding:20px; border-radius:8px; margin-bottom:30px; border:1px solid #ddd;">
+            <h3 class="section-subtitle" style="margin-top:0;">Yeni Evrak Girişi</h3>
+            <form id="addCheckForm" class="form-grid">
+                <div class="form-group">
+                    <label>Evrak Yönü:</label>
+                    <select id="direction" required onchange="toggleFormType()">
+                        <option value="Alınan">Alınan Çek (Portföye)</option>
+                        <option value="Verilen">Verilen Çek (Borç)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label id="lblEntity">Kimden Alındı (Cari):</label>
+                    <input type="text" id="entityName" placeholder="Kişi/Firma Adı" required>
+                </div>
+                <div class="form-group">
+                    <label>Vade Tarihi:</label>
+                    <input type="date" id="maturityDate" required>
+                </div>
+                <div class="form-group">
+                    <label>Tutar (TL):</label>
+                    <input type="number" id="amount" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label>Banka / Şube:</label>
+                    <input type="text" id="bankName" placeholder="Örn: Garanti / Maslak">
+                </div>
+                <div class="form-group">
+                    <label>Çek No:</label>
+                    <input type="text" id="checkNo">
+                </div>
+                <div class="form-group full-width">
+                    <button type="submit" class="button primary">Evrak Kaydet</button>
+                </div>
+            </form>
+        </div>
+
+        <h2 class="section-title">Evrak Listesi</h2>
+        <div class="filter-bar">
+            <button class="button secondary" onclick="loadChecks('all')">Tümü</button>
+            <button class="button secondary" onclick="loadChecks('Alınan')">Alınanlar (Portföy)</button>
+            <button class="button secondary" onclick="loadChecks('Verilen')">Verilenler (Borçlar)</button>
+        </div>
+
+        <div id="checkList" class="check-grid">
+            <p style="text-align:center; width:100%;">Yükleniyor...</p>
+        </div>
+    </div>
+
+    <div id="ciroModal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-top:0;">Çek Ciro Etme İşlemi</h3>
+            <p style="color:#666; font-size:0.9em; margin-bottom:15px;">
+                Bu çeki bir tedarikçiye verdiğinizde, çek portföyden çıkar ve seçilen tedarikçinin bakiyesinden tutar düşülür.
+            </p>
+            <form id="ciroForm">
+                <input type="hidden" id="ciroCheckId">
+                <input type="hidden" id="ciroAmount">
+                <input type="hidden" id="ciroCheckInfo">
+                
+                <div class="form-group" style="margin-bottom:15px;">
+                    <label style="display:block; margin-bottom:5px; font-weight:600;">Kime Ciro Edilecek (Cari):</label>
+                    <select id="ciroTargetSelect" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:4px;" required>
+                        <option value="">Yükleniyor...</option>
+                    </select>
+                </div>
+                
+                <div style="display:flex; justify-content:flex-end; gap:10px;">
+                    <button type="button" class="button secondary" onclick="closeCiroModal()">İptal</button>
+                    <button type="submit" class="button primary">Ciro Et ve Bakiyeden Düş</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBNwSpbpNuQQ4nTjDAlB6izu5IgkEZxDL0",
+            authDomain: "projetakip-e3a75.firebaseapp.com",
+            projectId: "projetakip-e3a75",
+            storageBucket: "projetakip-e3a75.firebasestorage.app",
+            messagingSenderId: "924120275674",
+            appId: "1:924120275674:web:c8ad3d4c998333d9fd23e3"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        let currentUserId = null;
+
+        const addCheckForm = document.getElementById('addCheckForm');
+        const checkList = document.getElementById('checkList');
+        const ciroModal = document.getElementById('ciroModal');
+        const ciroTargetSelect = document.getElementById('ciroTargetSelect');
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                currentUserId = user.uid;
+                document.getElementById('userEmail').textContent = user.email;
+                loadChecks('all');
+                loadEntitiesForCiro(); // Cari listesini önceden yükle
+            } else {
+                window.location.href = 'auth.html';
+            }
+        });
+
+        function showMessage(msg, isError=false) {
+            const el = document.getElementById('systemMessage');
+            el.textContent = msg;
+            el.className = 'message ' + (isError ? 'error-message' : 'success');
+            el.classList.add('show');
+            setTimeout(() => el.classList.remove('show'), 3000);
+        }
+
+        function toggleFormType() {
+            const dir = document.getElementById('direction').value;
+            document.getElementById('lblEntity').textContent = dir === 'Alınan' ? 'Kimden Alındı (Cari):' : 'Kime Verildi (Cari):';
+        }
+
+        // --- CARİLERİ YÜKLE (Dropdown İçin) ---
+        async function loadEntitiesForCiro() {
+            if(!currentUserId) return;
+            const snap = await db.collection('entities').where('ownerId', '==', currentUserId).orderBy('name').get();
+            let opts = '<option value="">Seçiniz...</option>';
+            snap.forEach(doc => {
+                opts += `<option value="${doc.id}">${doc.data().name}</option>`;
+            });
+            ciroTargetSelect.innerHTML = opts;
+        }
+
+        // --- ÇEK KAYDETME ---
+        addCheckForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const direction = document.getElementById('direction').value;
+            
+            // Eğer Verilen Çek ise, otomatik borçlanma kaydı girilebilir ama şimdilik manuel bırakıyoruz.
+            // Alınan çek ise portföye girer.
+            
+            const data = {
+                ownerId: currentUserId,
+                direction: direction,
+                entityName: document.getElementById('entityName').value,
+                maturityDate: firebase.firestore.Timestamp.fromDate(new Date(document.getElementById('maturityDate').value)),
+                amount: parseFloat(document.getElementById('amount').value),
+                bankName: document.getElementById('bankName').value,
+                checkNo: document.getElementById('checkNo').value,
+                status: direction === 'Alınan' ? 'Portföyde' : 'Ödendi Bekleniyor', // Varsayılanlar
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            try {
+                await db.collection('checks').add(data);
+                showMessage('Evrak kaydedildi!');
+                addCheckForm.reset();
+                loadChecks('all');
+            } catch (err) { showMessage('Hata: ' + err.message, true); }
+        });
+
+        // --- LİSTELEME ---
+        async function loadChecks(filterType) {
+            if(!currentUserId) return;
+            checkList.innerHTML = '<p>Yükleniyor...</p>';
+            
+            let query = db.collection('checks').where('ownerId', '==', currentUserId).orderBy('maturityDate', 'asc');
+            if (filterType !== 'all') {
+                query = query.where('direction', '==', filterType);
+            }
+
+            try {
+                const snap = await query.get();
+                checkList.innerHTML = '';
+                if(snap.empty) { checkList.innerHTML = '<p style="grid-column:1/-1; text-align:center;">Kayıt bulunamadı.</p>'; return; }
+
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    const dateStr = d.maturityDate.toDate().toLocaleDateString('tr-TR');
+                    const isReceived = d.direction === 'Alınan';
+                    const amountFmt = d.amount.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
+                    
+                    // Status Badge Rengi
+                    const statusClass = 'status-' + d.status.toLowerCase().replace(/ /g,'');
+
+                    // Ciro Butonu Sadece "Portföyde" olan Alınan Çeklerde Görünür
+                    let ciroBtn = '';
+                    if (isReceived && d.status === 'Portföyde') {
+                        ciroBtn = `<button class="btn-ciro" onclick="openCiroModal('${doc.id}', ${d.amount}, '${d.checkNo || ''}')">↪️ Ciro Et</button>`;
+                    }
+                    
+                    // Ciro edildiyse kime edildiği
+                    let infoRow = '';
+                    if (d.status === 'Ciro Edildi' && d.endorsedToName) {
+                        infoRow = `<div class="check-row" style="color:#0c5460; font-weight:bold;"><span>Şu Kişide:</span> <span>${d.endorsedToName}</span></div>`;
+                    }
+
+                    const div = document.createElement('div');
+                    div.className = `check-card ${isReceived ? 'check-received' : 'check-given'}`;
+                    div.innerHTML = `
+                        <div class="check-status ${statusClass}">${d.status}</div>
+                        <div class="check-header">
+                            <span>${amountFmt}</span>
+                            <span style="font-size:0.8em; color:#666;">${d.direction}</span>
+                        </div>
+                        <div class="check-row"><span>Vade:</span> <strong>${dateStr}</strong></div>
+                        <div class="check-row"><span>Asıl Sahibi:</span> <span>${d.entityName}</span></div>
+                        <div class="check-row"><span>Banka:</span> <span>${d.bankName || '-'}</span></div>
+                        <div class="check-row"><span>No:</span> <span>${d.checkNo || '-'}</span></div>
+                        ${infoRow}
+                        
+                        <div style="margin-top:15px; border-top:1px solid #eee; padding-top:10px; display:flex; justify-content:space-between; align-items:center;">
+                            ${ciroBtn}
+                            <div>
+                                <select onchange="updateStatus('${doc.id}', this.value)" style="padding:4px; font-size:0.85em;">
+                                    <option value="" disabled selected>Durum...</option>
+                                    <option value="Portföyde">Portföyde</option>
+                                    <option value="Tahsil Edildi">Tahsil Edildi</option>
+                                    <option value="Karşılıksız">Karşılıksız</option>
+                                </select>
+                                <button class="delete-btn" onclick="deleteCheck('${doc.id}')" style="font-size:0.85em;">Sil</button>
+                            </div>
+                        </div>
+                    `;
+                    checkList.appendChild(div);
+                });
+            } catch (err) { console.error(err); }
+        }
+
+        // --- CİRO İŞLEMLERİ ---
+        function openCiroModal(id, amount, no) {
+            document.getElementById('ciroCheckId').value = id;
+            document.getElementById('ciroAmount').value = amount;
+            document.getElementById('ciroCheckInfo').value = no;
+            ciroModal.style.display = 'block';
+        }
+
+        function closeCiroModal() {
+            ciroModal.style.display = 'none';
+        }
+
+        document.getElementById('ciroForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const checkId = document.getElementById('ciroCheckId').value;
+            const amount = parseFloat(document.getElementById('ciroAmount').value);
+            const entityId = ciroTargetSelect.value;
+            const entityName = ciroTargetSelect.options[ciroTargetSelect.selectedIndex].text;
+            const checkNo = document.getElementById('ciroCheckInfo').value;
+
+            if(!entityId) return showMessage('Lütfen bir cari seçin.', true);
+
+            try {
+                const batch = db.batch();
+
+                // 1. Çek Durumunu Güncelle
+                const checkRef = db.collection('checks').doc(checkId);
+                batch.update(checkRef, {
+                    status: 'Ciro Edildi',
+                    endorsedTo: entityId,
+                    endorsedToName: entityName,
+                    endorsedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                // 2. Tedarikçiye Ödeme Kaydı (Transaction) Gir
+                const transRef = db.collection('entity_transactions').doc();
+                batch.set(transRef, {
+                    ownerId: currentUserId,
+                    entityId: entityId,
+                    type: 'Alacaklandık', // Biz ödeme yaptık (Çek verdik)
+                    amount: amount,
+                    description: `Çek Cirosu (No: ${checkNo})`,
+                    date: firebase.firestore.FieldValue.serverTimestamp(),
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                // 3. Tedarikçi Bakiyesini Düş
+                const entityRef = db.collection('entities').doc(entityId);
+                batch.update(entityRef, {
+                    balance: firebase.firestore.FieldValue.increment(-amount)
+                });
+
+                await batch.commit();
+                showMessage(`Çek, ${entityName} carisine ciro edildi!`);
+                closeCiroModal();
+                loadChecks('all');
+
+            } catch (err) {
+                showMessage('Hata: ' + err.message, true);
+            }
+        });
+
+        // Manuel Durum Güncelleme
+        async function updateStatus(id, newStatus) {
+            try {
+                await db.collection('checks').doc(id).update({ status: newStatus });
+                showMessage('Durum güncellendi.');
+                loadChecks('all'); 
+            } catch (err) { showMessage('Hata: ' + err.message, true); }
+        }
+
+        async function deleteCheck(id) {
+            if(confirm('Evrak silinecek. (DİKKAT: Cariye işlenen kayıtlar silinmez, manuel düzeltmelisiniz)')) {
+                await db.collection('checks').doc(id).delete();
+                loadChecks('all');
+            }
+        }
+        
+        // Pencere dışına tıklayınca modal kapat
+        window.onclick = function(event) {
+            if (event.target == ciroModal) closeCiroModal();
+        }
+    </script>
+</body>
+</html>
