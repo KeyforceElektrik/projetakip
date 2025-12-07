@@ -67,7 +67,7 @@
                 <input type="text" id="updateProjectName" required>
             </div>
             <div class="form-group">
-                <label for="updateCustomerName">Müşteri Adı:</label>
+                <label for="updateCustomerName">Müşteri Adı (Cari Adı):</label>
                 <input type="text" id="updateCustomerName" required>
             </div>
             <div class="form-group">
@@ -118,7 +118,7 @@
                 <div class="form-group">
                     <label for="expensePayee">Kime Ödendi (Cari Adı):</label>
                     <input type="text" id="expensePayee" placeholder="Örn: Ahmet Usta, Nalbur..." required>
-                    <small>Cari hesaplarda yoksa otomatik sorulur.</small>
+                    <small style="color:#6f42c1;">* Cari listede yoksa otomatik sorulur.</small>
                 </div>
                 <div class="form-group">
                     <label for="expenseDescription">Açıklama:</label>
@@ -187,6 +187,7 @@
 
         <div id="collections" class="tab-content">
             <h3 class="section-subtitle">Yeni Tahsilat Ekle</h3>
+            <p style="font-size:0.9em; color:#007bff; margin-bottom:15px;">ℹ️ Not: Buradan eklenen tahsilat, proje müşterisinin (eğer cari kartı varsa) bakiyesinden otomatik düşülecektir.</p>
             <form id="addCollectionForm" class="form-grid">
                 <div class="form-group">
                     <label for="collectionWallet">Tahsil Edilen Kasa/Banka:</label>
@@ -373,7 +374,7 @@
         const expenseExchangeRateInput = document.getElementById('exchangeRate');
         const expenseExchangeRateGroup = document.getElementById('expenseExchangeRateGroup');
         const expenseDateInput = document.getElementById('expenseDate');
-        const expenseWalletSelect = document.getElementById('expenseWallet'); // YENİ
+        const expenseWalletSelect = document.getElementById('expenseWallet');
         
         const addCollectionForm = document.getElementById('addCollectionForm');
         const collectionListBody = document.getElementById('collectionListBody');
@@ -382,7 +383,7 @@
         const collectionExchangeRateGroup = document.getElementById('collectionExchangeRateGroup');
         const collectionDateInput = document.getElementById('collectionDate');
         const collectionTypeSelect = document.getElementById('collectionPaymentType');
-        const collectionWalletSelect = document.getElementById('collectionWallet'); // YENİ
+        const collectionWalletSelect = document.getElementById('collectionWallet');
         const checkDetailsDiv = document.getElementById('checkDetailsDiv');
         const barterDetailsDiv = document.getElementById('barterDetailsDiv');
         
@@ -407,7 +408,7 @@
                 if (currentProjectId) {
                     loadProjectDetails(currentProjectId);
                     loadFinancialData(currentProjectId);
-                    loadWalletsForDropdown(); // Cüzdanları yükle
+                    loadWalletsForDropdown();
                 } else {
                     showSystemMessage('Proje ID bulunamadı.', true);
                     setTimeout(() => { window.location.href = 'index.html'; }, 3000);
@@ -484,7 +485,7 @@
                 return;
             }
 
-            simContainer.innerHTML = '<div style="text-align:center; padding:20px;">Veriler analiz ediliyor...</div>';
+            simContainer.innerHTML = '<div style="text-align:center; padding:20px;">Geçmiş ve güncel piyasa verileri taranıyor...</div>';
             
             const d = contractDateForSim;
             const yyyy = d.getFullYear();
@@ -502,7 +503,7 @@
             try {
                 let oldApiUrl = `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${oldDateStr}/v1/currencies/usd.json`;
                 let oldRes = await fetch(oldApiUrl);
-                if (!oldRes.ok) throw new Error('Sözleşme tarihine ait veri bulunamadı.');
+                if (!oldRes.ok) throw new Error('Sözleşme tarihine ait piyasa verisi bulunamadı.');
                 const oldData = await oldRes.json();
 
                 let newApiUrl = `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json`;
@@ -552,7 +553,7 @@
                 const projectDoc = await db.collection('projects').doc(projectId).get();
                 if (projectDoc.exists && projectDoc.data().ownerId === currentUserId) {
                     const project = projectDoc.data();
-                    currentCustomerName = project.customerName; // Müşteri adını sakla
+                    currentCustomerName = project.customerName; 
 
                     projectHeaderTitle.textContent = `${project.projectName} Detayları`;
                     projectSummaryName.textContent = project.projectName;
@@ -651,12 +652,12 @@
             } catch (error) { showSystemMessage('Hata: ' + error.message, true); }
         });
 
-        // --- HARCAMA İŞLEMLERİ (AUTO CARI & CÜZDAN) ---
+        // --- HARCAMA İŞLEMLERİ (GÜNCELLENDİ: AUTO-CREATE CARİ) ---
         addExpenseForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             toggleLoading(true);
 
-            const payeeName = document.getElementById('expensePayee').value;
+            const payeeName = document.getElementById('expensePayee').value.trim(); // Trim added
             const description = document.getElementById('expenseDescription').value;
             const walletId = document.getElementById('expenseWallet').value;
             const amount = parseFloat(document.getElementById('expenseAmount').value);
@@ -695,7 +696,6 @@
                         });
                         entityId = newEntityRef.id;
                     } else {
-                        // Kullanıcı istemezse cariye işlemeden devam et
                         entityId = null; 
                     }
                 } else {
@@ -723,14 +723,7 @@
                     batch.set(transRef, {
                         ownerId: currentUserId,
                         entityId: entityId,
-                        type: 'Alacaklandık', // Cari bize borçlu değil, biz ödedik (veya borçlandık ve ödedik)
-                        // Muhasebe: Nakit ödeme yaptığımızda Carinin alacağı azalır veya borcu kapanır.
-                        // Basit mantık: Carinin bakiyesini düşürmek yerine, burada biz ödeme yaptık. 
-                        // Aslında harcama = Hizmey aldık (Borçlandık) + Ödeme Yaptık (Alacaklandık) aynı anda olur peşin işlemde.
-                        // Bakiye etkisi 0'dır ama kayıt olsun.
-                        // Şimdilik sadece bakiye etkileşimi: Alacaklandık (Ödeme) -> Bakiye -
-                        // Ama harcama aslında bir hizmet alımıdır. 
-                        // Biz bu kişiye para verdik. Bakiyesi varsa düşer.
+                        type: 'Alacaklandık', // Ödeme Yaptık
                         amount: amountTL,
                         description: `Proje Ödemesi: ${projectHeaderTitle.textContent.replace(' Detayları','')}`,
                         date: firebase.firestore.Timestamp.fromDate(new Date(date)),
@@ -738,21 +731,11 @@
                     });
                     
                     const entityRef = db.collection('entities').doc(entityId);
-                    // Ödeme yaptık -> Carinin bizdeki alacağı azalır veya borcu artar (Negatif etki?)
-                    // Genelde: Cari Alacaklı (Pozitif) -> Ödeme -> Bakiye Azalır.
                     batch.update(entityRef, { balance: firebase.firestore.FieldValue.increment(-amountTL) });
                 }
 
                 // 4. CÜZDAN BAKİYE GÜNCELLEME
                 const walletRef = db.collection('accounts').doc(walletId);
-                // Harcama -> Kasadan para çıkar -> Eksi
-                // Para birimi kontrolü yapmıyoruz, TL karşılığını düşüyoruz basitlik için?
-                // VEYA: Cüzdan dövizi ile harcama dövizi aynıysa miktarı düş, değilse TL düş (karışık).
-                // BASİT YOL: Tutarı TL olarak düş (eğer cüzdan TL ise). 
-                // Şimdilik sadece TL cüzdan varsayımı veya miktar düşümü yapalım.
-                // Kasa USD ise ve harcama USD ise amount düş.
-                // En garantisi: Hangi para birimindeyse o miktar düşülür (Çapraz kur yok).
-                // Kullanıcı doğru kasayı seçmeli.
                 batch.update(walletRef, { balance: firebase.firestore.FieldValue.increment(-amount) });
 
                 await batch.commit();
@@ -764,7 +747,7 @@
             finally { toggleLoading(false); }
         });
 
-        // --- TAHSİLAT İŞLEMLERİ (GÜNCELLENDİ - CÜZDAN EKLENDİ) ---
+        // --- TAHSİLAT İŞLEMLERİ (GÜNCELLENDİ: AUTO-CREATE CARİ) ---
         addCollectionForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             toggleLoading(true);
@@ -797,13 +780,30 @@
                 const amountTL = amount * exchangeRate;
                 const batch = db.batch();
 
-                // 1. CARİ (MÜŞTERİ) BUL
-                let cariMsg = "";
+                // 1. CARİ (MÜŞTERİ) BUL VE OLUŞTUR
+                let entityId = null;
                 const entitiesQuery = await db.collection('entities')
                     .where('ownerId', '==', currentUserId)
                     .where('name', '==', currentCustomerName)
                     .limit(1)
                     .get();
+
+                if (entitiesQuery.empty) {
+                    if (confirm(`"${currentCustomerName}" adında cari bulunamadı. Müşteri cari kartı oluşturulsun mu?`)) {
+                        const newEntityRef = db.collection('entities').doc();
+                        batch.set(newEntityRef, {
+                            ownerId: currentUserId,
+                            name: currentCustomerName,
+                            type: 'Müşteri', 
+                            phone: '',
+                            balance: 0,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        entityId = newEntityRef.id;
+                    }
+                } else {
+                    entityId = entitiesQuery.docs[0].id;
+                }
 
                 // 2. PROJE TAHSİLAT KAYDI
                 const newColRef = db.collection('projects').doc(currentProjectId).collection('collections').doc();
@@ -824,8 +824,7 @@
                 });
 
                 // 3. CARİ İŞLEM
-                if (!entitiesQuery.empty) {
-                    const entityId = entitiesQuery.docs[0].id;
+                if (entityId) {
                     const transRef = db.collection('entity_transactions').doc();
                     batch.set(transRef, {
                         ownerId: currentUserId,
@@ -838,21 +837,14 @@
                     });
                     const entityRef = db.collection('entities').doc(entityId);
                     batch.update(entityRef, { balance: firebase.firestore.FieldValue.increment(-amountTL) });
-                    cariMsg = " (Cari Güncellendi)";
-                } else {
-                    // Cari yoksa otomatik açalım mı? (Genelde müşteri carisi başta açılmalı ama...)
-                    // Burası tahsilat olduğu için müşteri bellidir.
-                    // Şimdilik uyarı verelim.
-                    cariMsg = " (Cari Bulunamadı!)";
                 }
 
                 // 4. CÜZDAN BAKİYE GÜNCELLEME
                 const walletRef = db.collection('accounts').doc(walletId);
-                // Para girişi -> Artı
                 batch.update(walletRef, { balance: firebase.firestore.FieldValue.increment(amount) });
 
                 await batch.commit();
-                showSystemMessage(`Tahsilat eklendi! ${cariMsg}`, !entitiesQuery.empty ? false : true);
+                showSystemMessage(`Tahsilat eklendi!`, false);
                 addCollectionForm.reset();
                 loadFinancialData(currentProjectId);
 
@@ -860,7 +852,7 @@
             finally { toggleLoading(false); }
         });
 
-        // ... Diğer currency ve delete fonksiyonları aynı ...
+        // ... [Listener'lar ve diğer fonksiyonlar aynı] ...
         expenseCurrencySelect.addEventListener('change', async () => {
             const curr = expenseCurrencySelect.value;
             const date = expenseDateInput.value;
