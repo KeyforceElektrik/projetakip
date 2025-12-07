@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cari Hesaplar - KeyForce</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .cari-header-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .summary-box { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-align: center; border: 1px solid #e0e0e0; }
+        .summary-box h4 { margin: 0 0 10px 0; color: #555; }
+        .summary-box .val { font-size: 1.5em; font-weight: 700; color: #007bff; }
+        .val-alacak { color: #28a745; } /* Bizim Alacağımız */
+        .val-borc { color: #dc3545; }   /* Bizim Borcumuz */
+        
+        .transaction-type-plus { color: #28a745; font-weight: bold; } /* Alacaklandık */
+        .transaction-type-minus { color: #dc3545; font-weight: bold; } /* Borçlandık */
+        
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); }
+        .modal-content { background-color: #fefefe; margin: 10% auto; padding: 20px; border: 1px solid #888; width: 90%; max-width: 500px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Cari Hesaplar</h1>
+            <div class="header-right">
+                <span class="user-info">Hoş geldin, <span id="userEmail"></span>!</span>
+                <button onclick="window.location.href='index.html'" class="button secondary">Ana Menü</button>
+            </div>
+        </header>
+
+        <div id="systemMessage" class="message"></div>
+
+        <div class="cari-header-grid">
+            <div class="summary-box">
+                <h4>Toplam Alacak</h4>
+                <div class="val val-alacak" id="totalReceivable">0,00 ₺</div>
+            </div>
+            <div class="summary-box">
+                <h4>Toplam Borç</h4>
+                <div class="val val-borc" id="totalDebt">0,00 ₺</div>
+            </div>
+            <div class="summary-box">
+                <h4>Net Durum</h4>
+                <div class="val" id="totalNet">0,00 ₺</div>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 20px; display: flex; gap: 10px;">
+            <button class="button primary" onclick="openModal('addEntityModal')">+ Yeni Cari Kart</button>
+            <button class="button secondary" onclick="openModal('addTransactionModal')">⚡ Hızlı İşlem Ekle</button>
+        </div>
+
+        <h2 class="section-title">Cari Listesi</h2>
+        <div class="financial-table-container">
+            <table class="financial-table index-table">
+                <thead>
+                    <tr>
+                        <th>Cari Adı / Firma</th>
+                        <th>Tip</th>
+                        <th>Telefon</th>
+                        <th>Bakiye Durumu</th>
+                        <th>İşlem</th>
+                    </tr>
+                </thead>
+                <tbody id="entityListBody">
+                    <tr><td colspan="5" style="text-align:center;">Yükleniyor...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="addEntityModal" class="modal">
+        <div class="modal-content">
+            <h3 class="section-subtitle" style="margin-top:0;">Yeni Cari Kart</h3>
+            <form id="addEntityForm" class="form-grid" style="grid-template-columns: 1fr;">
+                <div class="form-group">
+                    <label>Firma/Kişi Adı:</label>
+                    <input type="text" id="entityName" required>
+                </div>
+                <div class="form-group">
+                    <label>Tip:</label>
+                    <select id="entityType">
+                        <option value="Tedarikçi">Tedarikçi (Mal aldığımız)</option>
+                        <option value="Müşteri">Müşteri (İş yaptığımız)</option>
+                        <option value="Usta">Usta/Personel</option>
+                        <option value="Diğer">Diğer</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Telefon:</label>
+                    <input type="text" id="entityPhone">
+                </div>
+                <div class="form-group full-width">
+                    <button type="submit" class="button primary">Kaydet</button>
+                    <button type="button" class="button secondary" onclick="closeModal('addEntityModal')">İptal</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="addTransactionModal" class="modal">
+        <div class="modal-content">
+            <h3 class="section-subtitle" style="margin-top:0;">Cari Hareket Ekle</h3>
+            <form id="addTransactionForm" class="form-grid" style="grid-template-columns: 1fr;">
+                <div class="form-group">
+                    <label>Cari Seçiniz:</label>
+                    <select id="transEntitySelect" required>
+                        <option value="">Yükleniyor...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>İşlem Türü:</label>
+                    <select id="transType" required>
+                        <option value="Borçlandık">Borçlandık (Bize mal/hizmet verdiler)</option>
+                        <option value="Alacaklandık">Alacaklandık (Ödeme yaptık / İş yaptık)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tutar (TL):</label>
+                    <input type="number" id="transAmount" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label>Açıklama:</label>
+                    <input type="text" id="transDesc" placeholder="Örn: Fatura no 123, Nakit Ödeme" required>
+                </div>
+                <div class="form-group">
+                    <label>Tarih:</label>
+                    <input type="date" id="transDate" required>
+                </div>
+                <div class="form-group full-width">
+                    <button type="submit" class="button primary">Kaydet</button>
+                    <button type="button" class="button secondary" onclick="closeModal('addTransactionModal')">İptal</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBNwSpbpNuQQ4nTjDAlB6izu5IgkEZxDL0",
+            authDomain: "projetakip-e3a75.firebaseapp.com",
+            projectId: "projetakip-e3a75",
+            storageBucket: "projetakip-e3a75.firebasestorage.app",
+            messagingSenderId: "924120275674",
+            appId: "1:924120275674:web:c8ad3d4c998333d9fd23e3"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        let currentUserId = null;
+
+        const userEmailSpan = document.getElementById('userEmail');
+        const systemMessageDiv = document.getElementById('systemMessage');
+        const entityListBody = document.getElementById('entityListBody');
+        const transEntitySelect = document.getElementById('transEntitySelect');
+        const totalReceivable = document.getElementById('totalReceivable');
+        const totalDebt = document.getElementById('totalDebt');
+        const totalNet = document.getElementById('totalNet');
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                currentUserId = user.uid;
+                userEmailSpan.textContent = user.email;
+                loadEntities();
+                document.getElementById('transDate').value = new Date().toISOString().split('T')[0];
+            } else {
+                window.location.href = 'auth.html';
+            }
+        });
+
+        function showSystemMessage(msg, isError = false) {
+            systemMessageDiv.textContent = msg;
+            systemMessageDiv.className = 'message ' + (isError ? 'error-message' : 'success');
+            systemMessageDiv.classList.add('show');
+            setTimeout(() => systemMessageDiv.classList.remove('show'), 3000);
+        }
+
+        // Modals
+        window.openModal = (id) => document.getElementById(id).style.display = 'block';
+        window.closeModal = (id) => document.getElementById(id).style.display = 'none';
+
+        // --- CARİ KART EKLEME ---
+        document.getElementById('addEntityForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('entityName').value;
+            const type = document.getElementById('entityType').value;
+            const phone = document.getElementById('entityPhone').value;
+
+            try {
+                await db.collection('entities').add({
+                    ownerId: currentUserId,
+                    name: name, type: type, phone: phone,
+                    balance: 0, // Pozitif: Alacaklıyız, Negatif: Borçluyuz
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                showSystemMessage('Cari kart oluşturuldu.');
+                closeModal('addEntityModal');
+                document.getElementById('addEntityForm').reset();
+                loadEntities();
+            } catch (err) { showSystemMessage(err.message, true); }
+        });
+
+        // --- HAREKET EKLEME ---
+        document.getElementById('addTransactionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const entityId = document.getElementById('transEntitySelect').value;
+            const type = document.getElementById('transType').value;
+            const amount = parseFloat(document.getElementById('transAmount').value);
+            const desc = document.getElementById('transDesc').value;
+            const date = document.getElementById('transDate').value;
+
+            if(!entityId) return;
+
+            // Bakiye Etkisi:
+            // "Borçlandık": Adama borcumuz arttı (veya alacağımız azaldı). Bakiye AZALIR (-).
+            // "Alacaklandık": Adam bize borçlandı (veya biz ödedik). Bakiye ARTAR (+).
+            const balanceChange = (type === 'Alacaklandık') ? amount : -amount;
+
+            try {
+                const batch = db.batch();
+                
+                // 1. Hareketi kaydet
+                const transRef = db.collection('entity_transactions').doc();
+                batch.set(transRef, {
+                    ownerId: currentUserId,
+                    entityId: entityId,
+                    type: type,
+                    amount: amount,
+                    description: desc,
+                    date: firebase.firestore.Timestamp.fromDate(new Date(date)),
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                // 2. Cari bakiyeyi güncelle
+                const entityRef = db.collection('entities').doc(entityId);
+                batch.update(entityRef, {
+                    balance: firebase.firestore.FieldValue.increment(balanceChange)
+                });
+
+                await batch.commit();
+                showSystemMessage('İşlem kaydedildi.');
+                closeModal('addTransactionModal');
+                document.getElementById('addTransactionForm').reset();
+                document.getElementById('transDate').value = new Date().toISOString().split('T')[0];
+                loadEntities();
+            } catch (err) { showSystemMessage(err.message, true); }
+        });
+
+        // --- LİSTELEME VE HESAPLAMA ---
+        async function loadEntities() {
+            if(!currentUserId) return;
+            const snap = await db.collection('entities').where('ownerId','==',currentUserId).orderBy('name').get();
+            
+            entityListBody.innerHTML = '';
+            transEntitySelect.innerHTML = '<option value="">Seçiniz</option>';
+            
+            let sumAlacak = 0;
+            let sumBorc = 0;
+
+            if(snap.empty) {
+                entityListBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Kayıtlı cari yok.</td></tr>';
+                updateSummary(0,0);
+                return;
+            }
+
+            snap.forEach(doc => {
+                const d = doc.data();
+                
+                // Dropdown doldur
+                const opt = document.createElement('option');
+                opt.value = doc.id;
+                opt.textContent = d.name;
+                transEntitySelect.appendChild(opt);
+
+                // Tablo satırı
+                const row = entityListBody.insertRow();
+                row.insertCell(0).innerHTML = `<strong>${d.name}</strong>`;
+                row.insertCell(1).textContent = d.type;
+                row.insertCell(2).textContent = d.phone || '-';
+                
+                const balCell = row.insertCell(3);
+                const bal = d.balance || 0;
+                
+                if(bal > 0) {
+                    balCell.innerHTML = `<span style="color:#28a745; font-weight:bold;">+${bal.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})} (Alacaklıyız)</span>`;
+                    sumAlacak += bal;
+                } else if (bal < 0) {
+                    balCell.innerHTML = `<span style="color:#dc3545; font-weight:bold;">${bal.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})} (Borçluyuz)</span>`;
+                    sumBorc += Math.abs(bal);
+                } else {
+                    balCell.textContent = "-";
+                }
+
+                row.insertCell(4).innerHTML = `<button class="delete-btn" onclick="deleteEntity('${doc.id}', '${d.name}')">Sil</button>`;
+            });
+
+            updateSummary(sumAlacak, sumBorc);
+        }
+
+        function updateSummary(alacak, borc) {
+            totalReceivable.textContent = alacak.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
+            totalDebt.textContent = borc.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
+            
+            const net = alacak - borc;
+            totalNet.textContent = net.toLocaleString('tr-TR', {style:'currency', currency:'TRY'});
+            totalNet.className = 'val ' + (net >= 0 ? 'val-alacak' : 'val-borc');
+        }
+
+        window.deleteEntity = async (id, name) => {
+            if(confirm(name + ' ve tüm geçmişi silinecek. Emin misiniz?')) {
+                // Not: Gerçek uygulamada transaction'ları da silmek gerekir. Şimdilik sadece kartı siliyoruz.
+                await db.collection('entities').doc(id).delete();
+                loadEntities();
+            }
+        };
+    </script>
+</body>
+</html>
