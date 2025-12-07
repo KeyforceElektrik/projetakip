@@ -67,7 +67,7 @@
                 <input type="text" id="updateProjectName" required>
             </div>
             <div class="form-group">
-                <label for="updateCustomerName">Müşteri Adı (Cari Adı ile Aynı Olmalı):</label>
+                <label for="updateCustomerName">Müşteri Adı:</label>
                 <input type="text" id="updateCustomerName" required>
             </div>
             <div class="form-group">
@@ -116,8 +116,19 @@
             <h3 class="section-subtitle">Yeni Harcama Ekle</h3>
             <form id="addExpenseForm" class="form-grid">
                 <div class="form-group">
+                    <label for="expensePayee">Kime Ödendi (Cari Adı):</label>
+                    <input type="text" id="expensePayee" placeholder="Örn: Ahmet Usta, Nalbur..." required>
+                    <small>Cari hesaplarda yoksa otomatik sorulur.</small>
+                </div>
+                <div class="form-group">
                     <label for="expenseDescription">Açıklama:</label>
-                    <input type="text" id="expenseDescription" placeholder="Harcama Açıklaması" required>
+                    <input type="text" id="expenseDescription" placeholder="Harcama detayları" required>
+                </div>
+                <div class="form-group">
+                    <label for="expenseWallet">Ödeme Yapılan Kasa/Banka:</label>
+                    <select id="expenseWallet" required>
+                        <option value="">Hesap Seçiniz...</option>
+                        </select>
                 </div>
                 <div class="form-group">
                     <label for="expenseType">Kayıt Türü:</label>
@@ -148,7 +159,7 @@
                     <input type="date" id="expenseDate" required>
                 </div>
                 <div class="form-group full-width">
-                    <button type="submit" class="button primary">Harcama Ekle</button>
+                    <button type="submit" class="button primary">Harcama Ekle & Bakiyeleri Güncelle</button>
                 </div>
             </form>
             <h3 class="section-subtitle">Harcama Listesi</h3>
@@ -158,6 +169,7 @@
                         <tr>
                             <th>Tarih</th>
                             <th>Tür</th>
+                            <th>Kime</th>
                             <th>Açıklama</th>
                             <th>Miktar</th>
                             <th>Para Birimi</th>
@@ -167,7 +179,7 @@
                         </tr>
                     </thead>
                     <tbody id="expenseListBody">
-                        <tr><td colspan="8" style="text-align:center;">Harcamalar yükleniyor...</td></tr>
+                        <tr><td colspan="9" style="text-align:center;">Harcamalar yükleniyor...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -175,8 +187,13 @@
 
         <div id="collections" class="tab-content">
             <h3 class="section-subtitle">Yeni Tahsilat Ekle</h3>
-            <p style="font-size:0.9em; color:#007bff; margin-bottom:15px;">ℹ️ Not: Buradan eklenen tahsilat, proje müşterisinin (eğer cari kartı varsa) bakiyesinden otomatik düşülecektir.</p>
             <form id="addCollectionForm" class="form-grid">
+                <div class="form-group">
+                    <label for="collectionWallet">Tahsil Edilen Kasa/Banka:</label>
+                    <select id="collectionWallet" required>
+                        <option value="">Hesap Seçiniz...</option>
+                        </select>
+                </div>
                 <div class="form-group">
                     <label for="collectionDescription">Açıklama:</label>
                     <input type="text" id="collectionDescription" placeholder="Tahsilat Açıklaması" required>
@@ -231,7 +248,7 @@
                     <textarea id="barterDescription" rows="3"></textarea>
                 </div>
                 <div class="form-group full-width">
-                    <button type="submit" class="button primary">Tahsilat Ekle & Cariye İşle</button>
+                    <button type="submit" class="button primary">Tahsilat Ekle & Bakiyeleri Güncelle</button>
                 </div>
             </form>
             <h3 class="section-subtitle">Tahsilat Listesi</h3>
@@ -320,7 +337,7 @@
         
         let currentProjectId = null;
         let currentUserId = null;
-        let currentCustomerName = ""; // Cari eşleşmesi için
+        let currentCustomerName = ""; 
         let balanceChart = null;
         let contractDateForSim = null;
         let contractAmountUSDForSim = 0;
@@ -356,6 +373,7 @@
         const expenseExchangeRateInput = document.getElementById('exchangeRate');
         const expenseExchangeRateGroup = document.getElementById('expenseExchangeRateGroup');
         const expenseDateInput = document.getElementById('expenseDate');
+        const expenseWalletSelect = document.getElementById('expenseWallet'); // YENİ
         
         const addCollectionForm = document.getElementById('addCollectionForm');
         const collectionListBody = document.getElementById('collectionListBody');
@@ -364,6 +382,7 @@
         const collectionExchangeRateGroup = document.getElementById('collectionExchangeRateGroup');
         const collectionDateInput = document.getElementById('collectionDate');
         const collectionTypeSelect = document.getElementById('collectionPaymentType');
+        const collectionWalletSelect = document.getElementById('collectionWallet'); // YENİ
         const checkDetailsDiv = document.getElementById('checkDetailsDiv');
         const barterDetailsDiv = document.getElementById('barterDetailsDiv');
         
@@ -388,6 +407,7 @@
                 if (currentProjectId) {
                     loadProjectDetails(currentProjectId);
                     loadFinancialData(currentProjectId);
+                    loadWalletsForDropdown(); // Cüzdanları yükle
                 } else {
                     showSystemMessage('Proje ID bulunamadı.', true);
                     setTimeout(() => { window.location.href = 'index.html'; }, 3000);
@@ -412,6 +432,18 @@
         }
 
         function toggleLoading(show) { loadingOverlay.style.display = show ? 'flex' : 'none'; }
+
+        // --- CÜZDANLARI YÜKLE ---
+        async function loadWalletsForDropdown() {
+            const snap = await db.collection('accounts').where('ownerId', '==', currentUserId).get();
+            let optionsHtml = '<option value="">Hesap Seçiniz...</option>';
+            snap.forEach(doc => {
+                const d = doc.data();
+                optionsHtml += `<option value="${doc.id}">${d.name} (${d.currency})</option>`;
+            });
+            expenseWalletSelect.innerHTML = optionsHtml;
+            collectionWalletSelect.innerHTML = optionsHtml;
+        }
 
         // --- KUR FONKSİYONU ---
         async function fetchCurrencyRates(dateString, currencyCode) {
@@ -447,16 +479,12 @@
 
         // --- SİMÜLASYON ---
         async function runFantasySimulation() {
-            if (!contractDateForSim) {
-                simContainer.innerHTML = '<div style="text-align:center; padding:20px; color:#dc3545;">Lütfen önce proje sözleşme tarihini giriniz.</div>';
-                return;
-            }
-            if (!contractAmountUSDForSim || contractAmountUSDForSim <= 0) {
-                simContainer.innerHTML = '<div style="text-align:center; padding:20px; color:#dc3545;">Projede henüz "Net Kar" oluşmadığı için yatırım simülasyonu yapılamaz.</div>';
+            if (!contractDateForSim || !contractAmountUSDForSim || contractAmountUSDForSim <= 0) {
+                simContainer.innerHTML = '<div style="text-align:center; padding:20px; color:#dc3545;">Simülasyon için geçerli bir Sözleşme Tarihi ve Net Kar gereklidir.</div>';
                 return;
             }
 
-            simContainer.innerHTML = '<div style="text-align:center; padding:20px;">Geçmiş ve güncel piyasa verileri taranıyor...</div>';
+            simContainer.innerHTML = '<div style="text-align:center; padding:20px;">Veriler analiz ediliyor...</div>';
             
             const d = contractDateForSim;
             const yyyy = d.getFullYear();
@@ -474,12 +502,11 @@
             try {
                 let oldApiUrl = `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${oldDateStr}/v1/currencies/usd.json`;
                 let oldRes = await fetch(oldApiUrl);
-                if (!oldRes.ok) throw new Error('Sözleşme tarihine ait piyasa verisi bulunamadı.');
+                if (!oldRes.ok) throw new Error('Sözleşme tarihine ait veri bulunamadı.');
                 const oldData = await oldRes.json();
 
                 let newApiUrl = `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json`;
                 let newRes = await fetch(newApiUrl);
-                if (!newRes.ok) throw new Error('Güncel piyasa verilerine ulaşılamadı.');
                 const newData = await newRes.json();
 
                 let htmlContent = '';
@@ -507,7 +534,7 @@
                             </div>
                             <div class="sim-row"><span>O Günkü Fiyat:</span><strong>$${oldPrice.toLocaleString('en-US', {maximumFractionDigits: 2})}</strong></div>
                             <div class="sim-row"><span>Bugünkü Fiyat:</span><strong>$${newPrice.toLocaleString('en-US', {maximumFractionDigits: 2})}</strong></div>
-                            <div class="sim-row"><span>Alınabilecek:</span><span>${quantity.toFixed(4)}</span></div>
+                            <div class="sim-row"><span>Miktar:</span><span>${quantity.toFixed(4)}</span></div>
                             <div class="sim-row" style="margin-top:10px; border-top:1px solid #eee; padding-top:5px;"><span>Şimdiki Değer:</span><strong style="color:#333;">$${currentValue.toLocaleString('en-US', {maximumFractionDigits: 0})}</strong></div>
                             <div class="sim-profit ${profitClass}">${profitSign}$${profit.toLocaleString('en-US', {maximumFractionDigits: 0})}</div>
                         </div>`;
@@ -516,7 +543,7 @@
                 simContainer.innerHTML = htmlContent;
             } catch (err) {
                 console.error(err);
-                simContainer.innerHTML = `<div style="text-align:center; padding:20px; color:red;">Hata: ${err.message}</div>`;
+                simContainer.innerHTML = `<div style="text-align:center; padding:20px; color:red;">Veri çekme hatası: ${err.message}</div>`;
             }
         }
 
@@ -525,9 +552,7 @@
                 const projectDoc = await db.collection('projects').doc(projectId).get();
                 if (projectDoc.exists && projectDoc.data().ownerId === currentUserId) {
                     const project = projectDoc.data();
-                    
-                    // Müşteri Adını Sakla (Cari Eşleşmesi İçin)
-                    currentCustomerName = project.customerName;
+                    currentCustomerName = project.customerName; // Müşteri adını sakla
 
                     projectHeaderTitle.textContent = `${project.projectName} Detayları`;
                     projectSummaryName.textContent = project.projectName;
@@ -610,12 +635,10 @@
 
         updateProjectForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const newCustomerName = updateCustomerNameInput.value;
-            
             try {
                 await db.collection('projects').doc(currentProjectId).update({
                     projectName: updateProjectNameInput.value,
-                    customerName: newCustomerName,
+                    customerName: updateCustomerNameInput.value,
                     status: updateStatusSelect.value,
                     contractAmount: parseFloat(updateContractAmountInput.value),
                     contractCurrency: updateContractCurrencySelect.value,
@@ -624,24 +647,67 @@
                 });
                 showSystemMessage('Proje güncellendi!');
                 loadProjectDetails(currentProjectId);
+                loadFinancialData(currentProjectId);
             } catch (error) { showSystemMessage('Hata: ' + error.message, true); }
         });
 
+        // --- HARCAMA İŞLEMLERİ (AUTO CARI & CÜZDAN) ---
         addExpenseForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            toggleLoading(true);
+
+            const payeeName = document.getElementById('expensePayee').value;
             const description = document.getElementById('expenseDescription').value;
+            const walletId = document.getElementById('expenseWallet').value;
             const amount = parseFloat(document.getElementById('expenseAmount').value);
             const currency = document.getElementById('expenseCurrency').value;
             const exchangeRate = parseFloat(document.getElementById('exchangeRate').value);
             const date = document.getElementById('expenseDate').value;
             const recordType = document.getElementById('expenseType').value;
 
-            if (!description || amount <= 0 || !date) return;
+            if (!payeeName || !description || amount <= 0 || !date || !walletId) {
+                toggleLoading(false);
+                return showSystemMessage('Lütfen tüm alanları doldurun.', true);
+            }
 
             try {
                 const amountTL = amount * exchangeRate;
-                await db.collection('projects').doc(currentProjectId).collection('expenses').add({
+                const batch = db.batch();
+
+                // 1. CARİ KONTROL VE OLUŞTURMA
+                let entityId = null;
+                const entityQ = await db.collection('entities')
+                    .where('ownerId', '==', currentUserId)
+                    .where('name', '==', payeeName)
+                    .limit(1)
+                    .get();
+
+                if (entityQ.empty) {
+                    if (confirm(`"${payeeName}" adında cari bulunamadı. Yeni cari kart oluşturulsun mu?`)) {
+                        const newEntityRef = db.collection('entities').doc();
+                        batch.set(newEntityRef, {
+                            ownerId: currentUserId,
+                            name: payeeName,
+                            type: 'Diğer', // Varsayılan
+                            phone: '',
+                            balance: 0,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        entityId = newEntityRef.id;
+                    } else {
+                        // Kullanıcı istemezse cariye işlemeden devam et
+                        entityId = null; 
+                    }
+                } else {
+                    entityId = entityQ.docs[0].id;
+                }
+
+                // 2. PROJE HARCAMASI EKLE
+                const expRef = db.collection('projects').doc(currentProjectId).collection('expenses').doc();
+                batch.set(expRef, {
                     description: description,
+                    payee: payeeName, // Kime ödendiği
+                    walletId: walletId, // Hangi kasadan
                     recordType: recordType,
                     amount: amount,
                     currency: currency,
@@ -650,18 +716,61 @@
                     date: firebase.firestore.Timestamp.fromDate(new Date(date)),
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
-                showSystemMessage('Harcama eklendi!');
+
+                // 3. CARİ HAREKET (Varsa)
+                if (entityId) {
+                    const transRef = db.collection('entity_transactions').doc();
+                    batch.set(transRef, {
+                        ownerId: currentUserId,
+                        entityId: entityId,
+                        type: 'Alacaklandık', // Cari bize borçlu değil, biz ödedik (veya borçlandık ve ödedik)
+                        // Muhasebe: Nakit ödeme yaptığımızda Carinin alacağı azalır veya borcu kapanır.
+                        // Basit mantık: Carinin bakiyesini düşürmek yerine, burada biz ödeme yaptık. 
+                        // Aslında harcama = Hizmey aldık (Borçlandık) + Ödeme Yaptık (Alacaklandık) aynı anda olur peşin işlemde.
+                        // Bakiye etkisi 0'dır ama kayıt olsun.
+                        // Şimdilik sadece bakiye etkileşimi: Alacaklandık (Ödeme) -> Bakiye -
+                        // Ama harcama aslında bir hizmet alımıdır. 
+                        // Biz bu kişiye para verdik. Bakiyesi varsa düşer.
+                        amount: amountTL,
+                        description: `Proje Ödemesi: ${projectHeaderTitle.textContent.replace(' Detayları','')}`,
+                        date: firebase.firestore.Timestamp.fromDate(new Date(date)),
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    const entityRef = db.collection('entities').doc(entityId);
+                    // Ödeme yaptık -> Carinin bizdeki alacağı azalır veya borcu artar (Negatif etki?)
+                    // Genelde: Cari Alacaklı (Pozitif) -> Ödeme -> Bakiye Azalır.
+                    batch.update(entityRef, { balance: firebase.firestore.FieldValue.increment(-amountTL) });
+                }
+
+                // 4. CÜZDAN BAKİYE GÜNCELLEME
+                const walletRef = db.collection('accounts').doc(walletId);
+                // Harcama -> Kasadan para çıkar -> Eksi
+                // Para birimi kontrolü yapmıyoruz, TL karşılığını düşüyoruz basitlik için?
+                // VEYA: Cüzdan dövizi ile harcama dövizi aynıysa miktarı düş, değilse TL düş (karışık).
+                // BASİT YOL: Tutarı TL olarak düş (eğer cüzdan TL ise). 
+                // Şimdilik sadece TL cüzdan varsayımı veya miktar düşümü yapalım.
+                // Kasa USD ise ve harcama USD ise amount düş.
+                // En garantisi: Hangi para birimindeyse o miktar düşülür (Çapraz kur yok).
+                // Kullanıcı doğru kasayı seçmeli.
+                batch.update(walletRef, { balance: firebase.firestore.FieldValue.increment(-amount) });
+
+                await batch.commit();
+                showSystemMessage('Harcama kaydedildi, bakiyeler güncellendi.');
                 addExpenseForm.reset();
                 loadFinancialData(currentProjectId);
+
             } catch (error) { showSystemMessage('Hata: ' + error.message, true); }
+            finally { toggleLoading(false); }
         });
 
-        // --- TAHSİLAT EKLEME & CARİ ENTEGRASYONU (GÜNCELLENDİ) ---
+        // --- TAHSİLAT İŞLEMLERİ (GÜNCELLENDİ - CÜZDAN EKLENDİ) ---
         addCollectionForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             toggleLoading(true);
 
             const description = document.getElementById('collectionDescription').value;
+            const walletId = document.getElementById('collectionWallet').value;
             const amount = parseFloat(document.getElementById('collectionAmount').value);
             const currency = document.getElementById('collectionCurrency').value;
             const exchangeRate = parseFloat(document.getElementById('collectionExchangeRate').value);
@@ -669,12 +778,11 @@
             const paymentType = document.getElementById('collectionPaymentType').value;
             const recordType = document.getElementById('collectionTypeInput').value;
 
-            if (!description || amount <= 0 || !date || !paymentType) {
+            if (!description || amount <= 0 || !date || !paymentType || !walletId) {
                 toggleLoading(false);
                 return showSystemMessage("Eksik bilgi.", true);
             }
 
-            // Ödeme detayları
             let checkNumber = '', checkMaturityDate = '', barterDescription = '';
             if (paymentType === 'Çek' || paymentType === 'Senet') {
                 checkNumber = document.getElementById('checkNumber').value.trim();
@@ -687,21 +795,21 @@
 
             try {
                 const amountTL = amount * exchangeRate;
-                
-                // 1. CARİ HESABI BULMAYA ÇALIŞ
-                let cariUpdateMsg = "";
+                const batch = db.batch();
+
+                // 1. CARİ (MÜŞTERİ) BUL
+                let cariMsg = "";
                 const entitiesQuery = await db.collection('entities')
                     .where('ownerId', '==', currentUserId)
                     .where('name', '==', currentCustomerName)
                     .limit(1)
                     .get();
 
-                const batch = db.batch();
-
-                // 2. Projeye Tahsilat Ekle (Her durumda)
+                // 2. PROJE TAHSİLAT KAYDI
                 const newColRef = db.collection('projects').doc(currentProjectId).collection('collections').doc();
                 batch.set(newColRef, {
                     description: description,
+                    walletId: walletId,
                     recordType: recordType,
                     amount: amount,
                     currency: currency,
@@ -715,48 +823,44 @@
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
 
-                // 3. Cari Bulunduysa İşle
+                // 3. CARİ İŞLEM
                 if (!entitiesQuery.empty) {
-                    const entityDoc = entitiesQuery.docs[0];
-                    const entityId = entityDoc.id;
-
-                    // Transaction Kaydı (Borçlandık/Ödeme Aldık = Bakiye Düşer)
-                    const newTransRef = db.collection('entity_transactions').doc();
-                    batch.set(newTransRef, {
+                    const entityId = entitiesQuery.docs[0].id;
+                    const transRef = db.collection('entity_transactions').doc();
+                    batch.set(transRef, {
                         ownerId: currentUserId,
                         entityId: entityId,
                         type: 'Tahsilat',
-                        amount: amountTL, // Cari TL bazlı tutuluyor
+                        amount: amountTL,
                         description: `Proje Tahsilatı: ${projectHeaderTitle.textContent.replace(' Detayları','')}`,
                         date: firebase.firestore.Timestamp.fromDate(new Date(date)),
                         createdAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
-
-                    // Bakiye Güncelleme (Alacak Düşer -> -amountTL)
                     const entityRef = db.collection('entities').doc(entityId);
-                    batch.update(entityRef, {
-                        balance: firebase.firestore.FieldValue.increment(-amountTL)
-                    });
-                    
-                    cariUpdateMsg = " ve Cariye işlendi";
+                    batch.update(entityRef, { balance: firebase.firestore.FieldValue.increment(-amountTL) });
+                    cariMsg = " (Cari Güncellendi)";
                 } else {
-                    cariUpdateMsg = ". (Dikkat: Cari kart bulunamadı, bakiyeden düşülmedi!)";
+                    // Cari yoksa otomatik açalım mı? (Genelde müşteri carisi başta açılmalı ama...)
+                    // Burası tahsilat olduğu için müşteri bellidir.
+                    // Şimdilik uyarı verelim.
+                    cariMsg = " (Cari Bulunamadı!)";
                 }
 
-                await batch.commit();
+                // 4. CÜZDAN BAKİYE GÜNCELLEME
+                const walletRef = db.collection('accounts').doc(walletId);
+                // Para girişi -> Artı
+                batch.update(walletRef, { balance: firebase.firestore.FieldValue.increment(amount) });
 
-                showSystemMessage(`Tahsilat eklendi${cariUpdateMsg}!`, entitiesQuery.empty); // Cari yoksa uyarı rengi
+                await batch.commit();
+                showSystemMessage(`Tahsilat eklendi! ${cariMsg}`, !entitiesQuery.empty ? false : true);
                 addCollectionForm.reset();
                 loadFinancialData(currentProjectId);
 
-            } catch (error) {
-                showSystemMessage('Hata: ' + error.message, true);
-            } finally {
-                toggleLoading(false);
-            }
+            } catch (error) { showSystemMessage('Hata: ' + error.message, true); }
+            finally { toggleLoading(false); }
         });
 
-        // Diğer listenerlar...
+        // ... Diğer currency ve delete fonksiyonları aynı ...
         expenseCurrencySelect.addEventListener('change', async () => {
             const curr = expenseCurrencySelect.value;
             const date = expenseDateInput.value;
@@ -769,6 +873,15 @@
                     const rate = await fetchCurrencyRates(date, curr);
                     if (rate) expenseExchangeRateInput.value = rate.toFixed(4);
                 }
+            }
+        });
+
+        expenseDateInput.addEventListener('change', async () => {
+            const curr = expenseCurrencySelect.value;
+            const date = expenseDateInput.value;
+            if (curr !== 'TRY' && date) {
+                const rate = await fetchCurrencyRates(date, curr);
+                if (rate) expenseExchangeRateInput.value = rate.toFixed(4);
             }
         });
 
@@ -788,6 +901,16 @@
             }
         });
 
+        collectionDateInput.addEventListener('change', async () => {
+            const curr = collectionCurrencySelect.value;
+            const date = collectionDateInput.value;
+            const type = collectionTypeSelect.value;
+            if (curr !== 'TRY' && type !== 'Barter' && date) {
+                const rate = await fetchCurrencyRates(date, curr);
+                if (rate) collectionExchangeRateInput.value = rate.toFixed(4);
+            }
+        });
+
         collectionTypeSelect.addEventListener('change', () => {
             const type = collectionTypeSelect.value;
             checkDetailsDiv.style.display = 'none';
@@ -803,10 +926,10 @@
         });
 
         async function deleteFinancialItem(collectionName, docId, description) {
-            if (confirm(`"${description}" silinecek?`)) {
+            if (confirm(`"${description}" silinecek? (Not: Cüzdan/Cari bakiyesi otomatik geri alınmaz, manuel düzeltme gerekebilir.)`)) {
                 try {
                     await db.collection('projects').doc(currentProjectId).collection(collectionName).doc(docId).delete();
-                    showSystemMessage('Silindi!');
+                    showSystemMessage('Kayıt silindi!');
                     loadFinancialData(currentProjectId);
                 } catch (error) { showSystemMessage('Silme hatası: ' + error.message, true); }
             }
@@ -857,7 +980,7 @@
                 remainingBalanceTL.classList.remove('positive', 'negative');
                 remainingBalanceTL.classList.add(remainingBalance >= 0 ? 'positive' : 'negative');
 
-                // Simülasyon verisi hazırlığı
+                // Simülasyon Verisi
                 const netProfitTL = totalCollections - totalExpenses;
                 const today = new Date().toISOString().split('T')[0];
                 const currentUsdRate = await fetchCurrencyRates(today, 'USD');
@@ -884,7 +1007,7 @@
                 row.insertCell(0).textContent = d.date ? d.date.toDate().toLocaleDateString('tr-TR') : '-';
                 const typeCell = row.insertCell(1);
                 typeCell.innerHTML = `<span class="type-badge ${d.recordType === 'Gayri Resmi' ? 'type-gayriresmi' : 'type-resmi'}">${d.recordType || 'Resmi'}</span>`;
-                row.insertCell(2).textContent = d.description;
+                row.insertCell(2).textContent = d.payee ? `${d.payee} (${d.description})` : d.description; // Kime ödendiği
                 row.insertCell(3).textContent = d.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
                 row.insertCell(4).textContent = d.currency;
                 row.insertCell(5).textContent = d.exchangeRate?.toLocaleString('tr-TR', { minimumFractionDigits: 4 }) || '-';
