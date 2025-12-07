@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finansal Takvim - KeyForce</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .calendar-container {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+            height: calc(100vh - 150px);
+        }
+        
+        /* Sol Liste (Yaklaşanlar) */
+        .upcoming-list {
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+        }
+        .event-card {
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            border-left: 4px solid #ccc;
+            background: #f8f9fa;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .event-card:hover { transform: translateX(5px); }
+        .event-income { border-left-color: #28a745; background: #e8f5e9; } /* Gelir */
+        .event-expense { border-left-color: #dc3545; background: #fbe9eb; } /* Gider */
+        
+        .event-date { font-weight: 700; color: #555; display: block; margin-bottom: 4px; }
+        .event-title { font-weight: 600; display: block; margin-bottom: 4px; }
+        .event-amount { font-weight: 700; float: right; }
+
+        /* Sağ Takvim (Grid) */
+        .calendar-grid {
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+        }
+        .cal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .cal-header h2 { margin: 0; color: #333; }
+        
+        .days-header {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            text-align: center;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .days-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 5px;
+            flex-grow: 1;
+        }
+        .day-cell {
+            border: 1px solid #eee;
+            border-radius: 4px;
+            padding: 5px;
+            min-height: 80px;
+            position: relative;
+            background: #fff;
+        }
+        .day-cell.today { background-color: #e3f2fd; border-color: #90caf9; }
+        .day-cell.other-month { background-color: #f9f9f9; color: #ccc; }
+        
+        .day-number { font-weight: 600; font-size: 0.9em; margin-bottom: 5px; display: block; }
+        
+        .cal-badge {
+            font-size: 0.7em;
+            padding: 2px 4px;
+            border-radius: 3px;
+            margin-bottom: 2px;
+            display: block;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: #fff;
+        }
+        .bg-green { background-color: #28a745; }
+        .bg-red { background-color: #dc3545; }
+
+        @media (max-width: 900px) {
+            .calendar-container { grid-template-columns: 1fr; height: auto; }
+            .upcoming-list { max-height: 300px; margin-bottom: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Finansal Takvim</h1>
+            <div class="header-right">
+                <span class="user-info">Hoş geldin, <span id="userEmail"></span>!</span>
+                <button onclick="window.location.href='index.html'" class="button secondary">Ana Menü</button>
+            </div>
+        </header>
+
+        <div id="systemMessage" class="message"></div>
+
+        <div class="calendar-container">
+            <div class="upcoming-list">
+                <h3 class="section-subtitle" style="margin-top:0;">⚡ Yaklaşan İşlemler</h3>
+                <div id="upcomingEventsList">
+                    <p style="text-align:center; color:#666;">Yükleniyor...</p>
+                </div>
+            </div>
+
+            <div class="calendar-grid">
+                <div class="cal-header">
+                    <button class="button secondary" onclick="changeMonth(-1)">❮ Önceki</button>
+                    <h2 id="currentMonthLabel">Aralık 2025</h2>
+                    <button class="button secondary" onclick="changeMonth(1)">Sonraki ❯</button>
+                </div>
+                
+                <div class="days-header">
+                    <div>Pzt</div><div>Sal</div><div>Çar</div><div>Per</div><div>Cum</div><div>Cmt</div><div>Paz</div>
+                </div>
+                <div id="daysGrid" class="days-grid">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBNwSpbpNuQQ4nTjDAlB6izu5IgkEZxDL0",
+            authDomain: "projetakip-e3a75.firebaseapp.com",
+            projectId: "projetakip-e3a75",
+            storageBucket: "projetakip-e3a75.firebasestorage.app",
+            messagingSenderId: "924120275674",
+            appId: "1:924120275674:web:c8ad3d4c998333d9fd23e3"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        let currentUserId = null;
+
+        let currentDate = new Date(); // Takvimde gösterilen tarih
+        let allEvents = []; // Tüm finansal olaylar (Cache)
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                currentUserId = user.uid;
+                document.getElementById('userEmail').textContent = user.email;
+                loadAllFinancialEvents();
+            } else {
+                window.location.href = 'auth.html';
+            }
+        });
+
+        // Tüm finansal verileri (Çekler, Cari İşlemler, Proje Tahsilatları) çeker
+        async function loadAllFinancialEvents() {
+            if(!currentUserId) return;
+            allEvents = [];
+
+            try {
+                // 1. Proje Tahsilatları (Çek/Senet olanlar)
+                const projects = await db.collection('projects').where('ownerId', '==', currentUserId).get();
+                
+                // Paralel sorgular için Promise array
+                const promises = projects.docs.map(async (doc) => {
+                    const collections = await doc.ref.collection('collections').get();
+                    collections.forEach(col => {
+                        const d = col.data();
+                        // Sadece geleceğe yönelik vadesi olan işlemleri alabiliriz veya hepsini
+                        // Takvimde görünmesi için 'checkMaturityDate' varsa onu, yoksa işlem tarihini baz alalım
+                        let date = null;
+                        let type = 'Gelir';
+                        
+                        if (d.checkMaturityDate) {
+                            date = new Date(d.checkMaturityDate);
+                        } else if (d.date) {
+                            date = d.date.toDate();
+                        }
+
+                        if (date) {
+                            allEvents.push({
+                                title: `Tahsilat: ${d.description}`,
+                                amount: d.amountTL,
+                                date: date,
+                                type: 'income', // Gelir
+                                source: 'Proje: ' + doc.data().projectName
+                            });
+                        }
+                    });
+                });
+
+                // 2. Cari İşlemler (Vadeli)
+                // Cari işlemler şimdilik 'entity_transactions' içinde tutuluyor
+                // Eğer cari modülünde vade tarihi eklediysek buraya dahil ederiz.
+                // Şimdilik sadece işlem tarihini baz alıyoruz.
+                const transSnap = await db.collection('entity_transactions').where('ownerId', '==', currentUserId).get();
+                transSnap.forEach(doc => {
+                    const d = doc.data();
+                    const date = d.date.toDate();
+                    const isIncome = d.type === 'Alacaklandık'; // Alacaklandık = Biz ödeme yaptık veya iş yaptık (Gelir gibi düşünebiliriz veya tam tersi bakış açısı)
+                    // Muhasebe mantığı: 
+                    // Cari'ye borçlandık -> Biz ödeme yapacağız (Gider)
+                    // Cari'den alacaklandık -> Para gelecek (Gelir)
+                    
+                    // Basitleştirmek için:
+                    // type: 'Borçlandık' -> Gider (Kırmızı)
+                    // type: 'Alacaklandık' -> Gelir (Yeşil)
+                    
+                    allEvents.push({
+                        title: `Cari: ${d.description}`,
+                        amount: d.amount,
+                        date: date,
+                        type: d.type === 'Alacaklandık' ? 'income' : 'expense',
+                        source: 'Cari İşlem'
+                    });
+                });
+
+                await Promise.all(promises);
+                
+                renderCalendar();
+                renderUpcomingList();
+
+            } catch (error) {
+                console.error("Veri çekme hatası:", error);
+                document.getElementById('systemMessage').textContent = "Veriler yüklenirken hata oluştu.";
+            }
+        }
+
+        function renderCalendar() {
+            const grid = document.getElementById('daysGrid');
+            const monthLabel = document.getElementById('currentMonthLabel');
+            grid.innerHTML = '';
+
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+
+            // Ay ismini yaz
+            const monthNames = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+            monthLabel.textContent = `${monthNames[month]} ${year}`;
+
+            // Ayın ilk günü ve toplam gün sayısı
+            const firstDay = new Date(year, month, 1).getDay(); // 0: Pazar, 1: Pzt
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            // Pazartesi'den başlatmak için (Pazar(0) -> 6, Pzt(1) -> 0)
+            const startOffset = firstDay === 0 ? 6 : firstDay - 1;
+
+            // Boş kutular (Önceki ay)
+            for (let i = 0; i < startOffset; i++) {
+                const div = document.createElement('div');
+                div.className = 'day-cell other-month';
+                grid.appendChild(div);
+            }
+
+            // Günler
+            const today = new Date();
+            for (let day = 1; day <= daysInMonth; day++) {
+                const div = document.createElement('div');
+                div.className = 'day-cell';
+                
+                // Bugün mü?
+                if (day === today.getDate() && month === today.getMonth() && year === today.getFullYear()) {
+                    div.classList.add('today');
+                }
+
+                div.innerHTML = `<span class="day-number">${day}</span>`;
+
+                // Bu güne ait olayları bul ve ekle
+                const dayEvents = allEvents.filter(e => 
+                    e.date.getDate() === day && 
+                    e.date.getMonth() === month && 
+                    e.date.getFullYear() === year
+                );
+
+                dayEvents.forEach(ev => {
+                    const badge = document.createElement('span');
+                    badge.className = `cal-badge ${ev.type === 'income' ? 'bg-green' : 'bg-red'}`;
+                    // Tutarı sığdırmak için kısa format (12.5K gibi)
+                    const shortAmt = ev.amount > 1000 ? (ev.amount/1000).toFixed(1) + 'k' : ev.amount;
+                    badge.textContent = `${ev.type === 'income' ? '+' : '-'} ${shortAmt}`;
+                    badge.title = `${ev.title} (${ev.amount.toLocaleString('tr-TR')} ₺)`;
+                    div.appendChild(badge);
+                });
+
+                grid.appendChild(div);
+            }
+        }
+
+        function renderUpcomingList() {
+            const list = document.getElementById('upcomingEventsList');
+            list.innerHTML = '';
+
+            // Bugünden sonraki olayları filtrele ve sırala
+            const today = new Date();
+            today.setHours(0,0,0,0);
+
+            const upcoming = allEvents.filter(e => e.date >= today)
+                                      .sort((a, b) => a.date - b.date)
+                                      .slice(0, 10); // İlk 10 kayıt
+
+            if (upcoming.length === 0) {
+                list.innerHTML = '<p style="text-align:center; color:#999;">Yaklaşan işlem yok.</p>';
+                return;
+            }
+
+            upcoming.forEach(ev => {
+                const div = document.createElement('div');
+                div.className = `event-card ${ev.type === 'income' ? 'event-income' : 'event-expense'}`;
+                div.innerHTML = `
+                    <span class="event-date">${ev.date.toLocaleDateString('tr-TR')}</span>
+                    <span class="event-title">${ev.title}</span>
+                    <span class="event-amount ${ev.type === 'income' ? 'bg-green' : 'bg-red'}" style="color:${ev.type === 'income' ? '#28a745' : '#dc3545'}">
+                        ${ev.amount.toLocaleString('tr-TR', {style:'currency', currency:'TRY'})}
+                    </span>
+                    <div style="clear:both; font-size:0.8em; color:#666; margin-top:5px;">${ev.source}</div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function changeMonth(delta) {
+            currentDate.setMonth(currentDate.getMonth() + delta);
+            renderCalendar();
+        }
+    </script>
+</body>
+</html>
