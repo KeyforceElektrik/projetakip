@@ -8,8 +8,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
-    <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
-    <script src="https://unpkg.com/jspdf-autotable"></script>
     <link rel="stylesheet" href="style.css">
     <style>
         .page-actions { display:flex; gap:12px; flex-wrap:wrap; }
@@ -94,11 +92,11 @@
                 </div>
                 <div class="form-group full-width" style="justify-content:flex-start; gap:12px;">
                     <button id="generateButton" class="button primary" type="button">Ekstreyi Hazırla</button>
-                    <button id="pdfButton" class="button secondary" type="button">PDF İndir</button>
+                    <button id="pdfButton" class="button secondary" type="button">PDF Olarak Yazdır</button>
                     <button id="printButton" class="button secondary" type="button">Yazdır</button>
                 </div>
             </div>
-            <div class="small-note">Not: Bakiye TL bazında hesaplanır. Dövizli sözleşme ve tahsilatlar, sistemde kayıtlı kur/TL karşılığı üzerinden özetlenir.</div>
+            <div class="small-note">Not: Ekstre mümkünse sözleşmenin ana para biriminde hazırlanır. Karışık para birimi varsa sistem TL özete döner. PDF için tarayıcının yazdır > PDF olarak kaydet seçeneği kullanılır.</div>
         </div>
 
         <div class="print-only" id="printHeader" style="margin-bottom:20px;"></div>
@@ -117,7 +115,7 @@
                     <div class="small-note" id="statementCaption">Henüz ekstre hazırlanmadı.</div>
                 </div>
                 <div class="page-actions">
-                    <button id="quickPdfButton" class="button primary" type="button">PDF İndir</button>
+                    <button id="quickPdfButton" class="button primary" type="button">PDF Olarak Yazdır</button>
                 </div>
             </div>
 
@@ -148,7 +146,7 @@
                 </table>
             </div>
             <div class="info-note" style="margin-top:18px;">
-                <strong>Ekstre notu:</strong> Bu belgede <strong>Borç</strong> müşteri hesabına işlenen sözleşme / anlaşma tutarını, <strong>Alacak</strong> ise yapılan tahsilatları ifade eder. Bakiye TL karşılığı olarak izlenir.
+                <strong>Ekstre notu:</strong> Bu belgede <strong>Borç</strong> müşteri hesabına işlenen sözleşme / anlaşma tutarını, <strong>Alacak</strong> ise yapılan tahsilatları ifade eder. Bakiye mümkünse sözleşmenin ana para biriminde izlenir; karışık kur durumlarında TL özet kullanılır.
             </div>
         </div>
     </div>
@@ -215,6 +213,7 @@
         pdfButton.addEventListener('click', exportPdf);
         quickPdfButton.addEventListener('click', exportPdf);
         printButton.addEventListener('click', () => window.print());
+        window.addEventListener('focus', async () => { if (currentUserId) await loadProjects(); });
 
         function showSystemMessage(message, isError = false) {
             systemMessageDiv.textContent = message;
@@ -238,37 +237,25 @@
             if (qProjectId) projectSelect.dataset.prefill = qProjectId;
         }
 
-        function normalizeCustomerName(name) {
-            return String(name || '').replace(/\s+/g, ' ').trim();
-        }
-
         async function loadProjects() {
-            try {
-                const snap = await db.collection('projects').where('ownerId', '==', currentUserId).get();
-                projectsCache = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                projectsCache.sort((a, b) => (a.projectName || '').localeCompare((b.projectName || ''), 'tr'));
+            const snap = await db.collection('projects').where('ownerId', '==', currentUserId).get();
+            projectsCache = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            projectsCache.sort((a, b) => normalizeText(a.projectName).localeCompare(normalizeText(b.projectName), 'tr'));
 
-                const customerNames = [...new Set(projectsCache.map(p => normalizeCustomerName(p.customerName)).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
-                customerSelect.innerHTML = '<option value="">Müşteri seçiniz...</option>';
-                customerNames.forEach(name => customerSelect.innerHTML += `<option value="${escapeHtmlAttr(name)}">${escapeHtml(name)}</option>`);
+            const customerNames = [...new Set(projectsCache.map(p => normalizeText(p.customerName)).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
+            customerSelect.innerHTML = '<option value="">Müşteri seçiniz...</option>';
+            customerNames.forEach(name => customerSelect.innerHTML += `<option value="${escapeHtmlAttr(name)}">${escapeHtml(name)}</option>`);
 
-                if (customerSelect.dataset.prefill && customerNames.includes(normalizeCustomerName(customerSelect.dataset.prefill))) {
-                    customerSelect.value = normalizeCustomerName(customerSelect.dataset.prefill);
-                }
-                populateProjectSelect(customerSelect.value);
-            } catch (error) {
-                console.error('Müşteri/proje listesi yüklenemedi:', error);
-                customerSelect.innerHTML = '<option value="">Müşteri yüklenemedi</option>';
-                projectSelect.innerHTML = '<option value="">Projeler yüklenemedi</option>';
-                showSystemMessage('Müşteri listesi yüklenemedi. Proje sorgusunda hata oluştu.', true);
+            const prefillCustomer = normalizeText(customerSelect.dataset.prefill);
+            if (prefillCustomer && customerNames.includes(prefillCustomer)) {
+                customerSelect.value = prefillCustomer;
             }
+            populateProjectSelect(customerSelect.value);
         }
 
         function populateProjectSelect(customerName) {
-            const normalizedCustomer = normalizeCustomerName(customerName);
-            const relevant = projectsCache
-                .filter(p => !normalizedCustomer || normalizeCustomerName(p.customerName) === normalizedCustomer)
-                .sort((a, b) => (a.projectName || '').localeCompare((b.projectName || ''), 'tr'));
+            const normalizedCustomer = normalizeText(customerName);
+            const relevant = projectsCache.filter(p => !normalizedCustomer || normalizeText(p.customerName) === normalizedCustomer).sort((a, b) => normalizeText(a.projectName).localeCompare(normalizeText(b.projectName), 'tr'));
             projectSelect.innerHTML = '<option value="">Tüm Projeler</option>';
             relevant.forEach(p => projectSelect.innerHTML += `<option value="${p.id}">${escapeHtml(p.projectName || 'Adsız Proje')}</option>`);
             if (projectSelect.dataset.prefill && relevant.some(p => p.id === projectSelect.dataset.prefill)) {
@@ -305,6 +292,61 @@
             return 'Resmi + Gayri Resmi';
         }
 
+        function normalizeText(value) {
+            return String(value || '').trim().replace(/\s+/g, ' ');
+        }
+
+        function pickStatementCurrency(projects, scope) {
+            const currencies = new Set();
+            projects.forEach(project => {
+                const contract = getContractBreakdown(project);
+                if (scope !== 'unofficial' && contract.official.amount > 0) currencies.add(contract.official.currency || 'TRY');
+                if (scope !== 'official' && contract.unofficial.amount > 0) currencies.add(contract.unofficial.currency || 'TRY');
+            });
+
+            if (currencies.size === 1) return [...currencies][0];
+            if (currencies.size === 0 && projects.length === 1) {
+                const project = projects[0];
+                return project.contractCurrency || 'TRY';
+            }
+            return 'TRY';
+        }
+
+        function getAmountInStatementCurrency(amount, currency, exchangeRate, statementCurrency) {
+            const amt = Number(amount) || 0;
+            const curr = currency || 'TRY';
+            const rate = Number(exchangeRate) || 1;
+
+            if (statementCurrency === 'TRY') {
+                return curr === 'TRY' ? amt : amt * rate;
+            }
+
+            if (curr === statementCurrency) return amt;
+
+            if (curr === 'TRY') {
+                return rate ? amt / rate : amt;
+            }
+
+            return null;
+        }
+
+        function getDisplayValue(amount, currency, exchangeRate, statementCurrency, fallbackTL) {
+            const converted = getAmountInStatementCurrency(amount, currency, exchangeRate, statementCurrency);
+            if (converted === null) {
+                return {
+                    numeric: Number(fallbackTL) || 0,
+                    text: formatMoney(fallbackTL, 'TRY'),
+                    fallback: true
+                };
+            }
+            return {
+                numeric: converted,
+                text: formatMoney(converted, statementCurrency),
+                fallback: false
+            };
+        }
+
+
         function inRange(date, startDate, endDate) {
             if (!(date instanceof Date) || isNaN(date)) return false;
             if (startDate && date < startDate) return false;
@@ -334,7 +376,9 @@
                 return;
             }
 
-            const candidateProjects = projectsCache.filter(p => normalizeCustomerName(p.customerName) === normalizeCustomerName(customerName) && (!selectedProjectId || p.id === selectedProjectId));
+            const normalizedCustomer = normalizeText(customerName);
+            const candidateProjects = projectsCache.filter(p => normalizeText(p.customerName) === normalizedCustomer && (!selectedProjectId || p.id === selectedProjectId));
+            const statementCurrency = pickStatementCurrency(candidateProjects, scope);
             if (!candidateProjects.length) {
                 renderEmpty('Bu müşteri için uygun proje bulunamadı.');
                 return;
@@ -351,7 +395,8 @@
                 const projectName = project.projectName || 'Adsız Proje';
 
                 const debitEntries = [];
-                if (scope !== 'unofficial' && contract.official.amountTL > 0) {
+                if (scope !== 'unofficial' && contract.official.amount > 0) {
+                    const officialDisplay = getDisplayValue(contract.official.amount, contract.official.currency, contract.official.exchangeRate, statementCurrency, contract.official.amountTL);
                     debitEntries.push({
                         date: contractDate,
                         projectName,
@@ -359,12 +404,13 @@
                         kindLabel: 'Sözleşme Borcu',
                         badge: 'badge-debit',
                         description: 'Resmi sözleşme tutarı',
-                        detail: formatMoney(contract.official.amount, contract.official.currency, false) + (contract.official.currency !== 'TRY' ? ` (${formatTRY(contract.official.amountTL)})` : ''),
-                        debit: contract.official.amountTL,
+                        detail: officialDisplay.fallback ? `${formatMoney(contract.official.amount, contract.official.currency, false)} (TL özeti)` : formatMoney(contract.official.amount, contract.official.currency, false),
+                        debit: officialDisplay.numeric,
                         credit: 0
                     });
                 }
-                if (scope !== 'official' && contract.unofficial.amountTL > 0) {
+                if (scope !== 'official' && contract.unofficial.amount > 0) {
+                    const unofficialDisplay = getDisplayValue(contract.unofficial.amount, contract.unofficial.currency, contract.unofficial.exchangeRate, statementCurrency, contract.unofficial.amountTL);
                     debitEntries.push({
                         date: contractDate,
                         projectName,
@@ -372,8 +418,8 @@
                         kindLabel: 'Sözleşme Borcu',
                         badge: 'badge-debit',
                         description: 'Gayri resmi anlaşma tutarı',
-                        detail: formatMoney(contract.unofficial.amount, contract.unofficial.currency, false) + (contract.unofficial.currency !== 'TRY' ? ` (${formatTRY(contract.unofficial.amountTL)})` : ''),
-                        debit: contract.unofficial.amountTL,
+                        detail: unofficialDisplay.fallback ? `${formatMoney(contract.unofficial.amount, contract.unofficial.currency, false)} (TL özeti)` : formatMoney(contract.unofficial.amount, contract.unofficial.currency, false),
+                        debit: unofficialDisplay.numeric,
                         credit: 0
                     });
                 }
@@ -393,8 +439,10 @@
                     const amountTL = parseFloat(d.amountTL ?? d.amount ?? 0) || 0;
                     const amount = parseFloat(d.amount ?? 0) || 0;
                     const currency = d.currency || 'TRY';
+                    const exchangeRate = parseFloat(d.exchangeRate ?? 1) || 1;
                     const rowDate = d.date?.toDate ? d.date.toDate() : new Date();
                     const paymentType = d.paymentType || 'Tahsilat';
+                    const displayValue = getDisplayValue(amount, currency, exchangeRate, statementCurrency, amountTL);
 
                     const row = {
                         date: rowDate,
@@ -403,9 +451,9 @@
                         kindLabel: 'Tahsilat',
                         badge: 'badge-credit',
                         description: d.description || paymentType,
-                        detail: `${recordType} / ${paymentType}` + (amount > 0 ? ` / ${formatMoney(amount, currency, false)}${currency !== 'TRY' ? ` (${formatTRY(amountTL)})` : ''}` : ''),
+                        detail: `${recordType} / ${paymentType}` + (amount > 0 ? ` / ${displayValue.fallback ? formatMoney(amount, currency, false) + ' (TL özeti)' : formatMoney(amount, currency, false)}` : ''),
                         debit: 0,
-                        credit: amountTL
+                        credit: displayValue.numeric
                     };
 
                     if (beforeRange(rowDate, startDate)) openingBalance -= row.credit;
@@ -427,7 +475,7 @@
                         <td>Önceki dönemlerden devreden bakiye</td>
                         <td style="text-align:right;">-</td>
                         <td style="text-align:right;">-</td>
-                        <td style="text-align:right; font-weight:700;">${formatTRY(openingBalance)}</td>
+                        <td style="text-align:right; font-weight:700;">${formatMoney(openingBalance, statementCurrency)}</td>
                     </tr>
                 `);
             }
@@ -441,9 +489,9 @@
                         <td><span class="statement-type-badge ${row.badge}">${row.kindLabel}</span></td>
                         <td>${escapeHtml(row.description)}</td>
                         <td>${escapeHtml(row.detail)}</td>
-                        <td style="text-align:right; color:#dc3545; font-weight:600;">${row.debit ? formatTRY(row.debit) : '-'}</td>
-                        <td style="text-align:right; color:#28a745; font-weight:600;">${row.credit ? formatTRY(row.credit) : '-'}</td>
-                        <td style="text-align:right; font-weight:700;">${formatTRY(runningBalance)}</td>
+                        <td style="text-align:right; color:#dc3545; font-weight:600;">${row.debit ? formatMoney(row.debit, statementCurrency) : '-'}</td>
+                        <td style="text-align:right; color:#28a745; font-weight:600;">${row.credit ? formatMoney(row.credit, statementCurrency) : '-'}</td>
+                        <td style="text-align:right; font-weight:700;">${formatMoney(runningBalance, statementCurrency)}</td>
                     </tr>
                 `);
             }
@@ -461,13 +509,14 @@
                 periodCredit,
                 closingBalance,
                 generatedAt: new Date(),
-                title: companyTitleInput.value.trim() || 'KEYFORCE Müşteri Ekstresi'
+                title: companyTitleInput.value.trim() || 'KEYFORCE Müşteri Ekstresi',
+                statementCurrency
             };
 
-            openingBalanceEl.textContent = formatTRY(openingBalance);
-            periodDebitEl.textContent = formatTRY(periodDebit);
-            periodCreditEl.textContent = formatTRY(periodCredit);
-            closingBalanceEl.textContent = formatTRY(closingBalance);
+            openingBalanceEl.textContent = formatMoney(openingBalance, statementCurrency);
+            periodDebitEl.textContent = formatMoney(periodDebit, statementCurrency);
+            periodCreditEl.textContent = formatMoney(periodCredit, statementCurrency);
+            closingBalanceEl.textContent = formatMoney(closingBalance, statementCurrency);
             metaCustomer.textContent = customerName;
             metaProject.textContent = lastStatement.selectedProjectName;
             metaRange.textContent = formatRangeLabel(startDate, endDate);
@@ -480,6 +529,7 @@
                     <div><strong>Proje:</strong> ${escapeHtml(lastStatement.selectedProjectName)}</div>
                     <div><strong>Dönem:</strong> ${escapeHtml(formatRangeLabel(startDate, endDate))}</div>
                     <div><strong>Düzenleme:</strong> ${formatDateTimeTR(lastStatement.generatedAt)}</div>
+                    <div><strong>Para Birimi:</strong> ${escapeHtml(statementCurrency)}</div>
                 </div>
             `;
 
@@ -508,96 +558,9 @@
                 showSystemMessage('Önce ekstreyi hazırlamalısın.', true);
                 return;
             }
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-            const pageWidth = doc.internal.pageSize.getWidth();
-            const margin = 14;
-            let y = 16;
 
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(16);
-            doc.text(lastStatement.title, margin, y);
-            y += 8;
-
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(10);
-            doc.text(`Müşteri: ${lastStatement.customerName}`, margin, y);
-            y += 5;
-            doc.text(`Proje: ${lastStatement.selectedProjectName}`, margin, y);
-            y += 5;
-            doc.text(`Dönem: ${formatRangeLabel(lastStatement.startDate, lastStatement.endDate)}`, margin, y);
-            y += 5;
-            doc.text(`Kapsam: ${getScopeLabel(lastStatement.scope)}`, margin, y);
-            y += 5;
-            doc.text(`Düzenleme: ${formatDateTimeTR(lastStatement.generatedAt)}`, margin, y);
-            y += 8;
-
-            doc.setFont('helvetica', 'bold');
-            doc.text(`Açılış: ${formatTRY(lastStatement.openingBalance)}`, margin, y);
-            doc.text(`Dönem Borç: ${formatTRY(lastStatement.periodDebit)}`, margin + 50, y);
-            doc.text(`Dönem Tahsilat: ${formatTRY(lastStatement.periodCredit)}`, margin + 105, y);
-            doc.text(`Kapanış: ${formatTRY(lastStatement.closingBalance)}`, margin + 165, y, { align: 'right' });
-            y += 8;
-
-            const body = [];
-            let running = lastStatement.openingBalance;
-            if (lastStatement.openingBalance !== 0) {
-                body.push([
-                    formatDateTR(lastStatement.startDate || new Date()),
-                    '-',
-                    'Açılış',
-                    'Devir bakiyesi',
-                    'Önceki dönemlerden devreden bakiye',
-                    '-',
-                    '-',
-                    formatTRY(running)
-                ]);
-            }
-
-            lastStatement.rows.forEach(row => {
-                running += row.debit - row.credit;
-                body.push([
-                    formatDateTR(row.date),
-                    row.projectName,
-                    row.kindLabel,
-                    row.description,
-                    row.detail,
-                    row.debit ? formatTRY(row.debit) : '-',
-                    row.credit ? formatTRY(row.credit) : '-',
-                    formatTRY(running)
-                ]);
-            });
-
-            doc.autoTable({
-                startY: y,
-                head: [['Tarih', 'Proje', 'İşlem', 'Açıklama', 'Detay', 'Borç', 'Alacak', 'Bakiye']],
-                body,
-                styles: { fontSize: 8, cellPadding: 2.2, overflow: 'linebreak' },
-                headStyles: { fillColor: [52, 73, 94] },
-                columnStyles: {
-                    0: { cellWidth: 19 },
-                    1: { cellWidth: 28 },
-                    2: { cellWidth: 18 },
-                    3: { cellWidth: 34 },
-                    4: { cellWidth: 36 },
-                    5: { halign: 'right', cellWidth: 18 },
-                    6: { halign: 'right', cellWidth: 18 },
-                    7: { halign: 'right', cellWidth: 20 }
-                },
-                margin: { left: margin, right: margin },
-                didDrawPage: function(data) {
-                    const pageCount = doc.internal.getNumberOfPages();
-                    doc.setFontSize(8);
-                    doc.text(`Sayfa ${doc.internal.getCurrentPageInfo().pageNumber} / ${pageCount}`, pageWidth - margin, doc.internal.pageSize.getHeight() - 6, { align: 'right' });
-                }
-            });
-
-            const finalY = doc.lastAutoTable.finalY || y;
-            doc.setFontSize(8.5);
-            doc.text('Not: Borç müşteri hesabına işlenen tutarı, alacak yapılan tahsilatları ifade eder. Bakiye TL karşılığı olarak izlenir.', margin, finalY + 8);
-
-            const safeName = `${slugify(lastStatement.customerName)}_ekstre_${formatDateInput(lastStatement.generatedAt)}`;
-            doc.save(`${safeName}.pdf`);
+            document.title = `${lastStatement.customerName} Ekstresi`;
+            setTimeout(() => window.print(), 150);
         }
 
         function formatDateInput(date) {
