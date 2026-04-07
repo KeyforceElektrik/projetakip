@@ -45,6 +45,7 @@
             <h1 id="projectHeaderTitle">Proje Detayları</h1>
             <div class="header-right">
                 <span class="user-info">Hoş geldin, <span id="userEmail"></span>!</span>
+                <button type="button" id="statementButton" class="button secondary">Müşteri Ekstresi</button>
                 <button id="logoutButton" class="button secondary">Çıkış Yap</button>
             </div>
         </header>
@@ -376,6 +377,7 @@
         // Elements
         const userEmailSpan = document.getElementById('userEmail');
         const logoutButton = document.getElementById('logoutButton');
+        const statementButton = document.getElementById('statementButton');
         const systemMessageDiv = document.getElementById('systemMessage');
         const loadingOverlay = document.getElementById('loadingOverlay');
         const projectHeaderTitle = document.getElementById('projectHeaderTitle');
@@ -459,6 +461,12 @@
         });
 
         logoutButton.addEventListener('click', async () => { try { await auth.signOut(); } catch (e) {} });
+        statementButton.addEventListener('click', () => {
+            const params = new URLSearchParams();
+            if (currentProjectId) params.set('projectId', currentProjectId);
+            if (currentCustomerName) params.set('customer', currentCustomerName);
+            window.location.href = `ekstre.html?${params.toString()}`;
+        });
 
         function showSystemMessage(message, isError = false) {
             systemMessageDiv.textContent = message;
