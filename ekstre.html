@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Müşteri Ekstresi - KeyForce</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+    <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
+    <script src="https://unpkg.com/jspdf-autotable"></script>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .page-actions { display:flex; gap:12px; flex-wrap:wrap; }
+        .filter-card, .statement-card, .summary-strip, .info-note { background:#fff; border:1px solid #e0e0e0; border-radius:12px; box-shadow:0 4px 15px rgba(0,0,0,0.05); }
+        .filter-card, .statement-card, .info-note { padding:20px; }
+        .summary-strip { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:0; overflow:hidden; margin-bottom:20px; }
+        .summary-item { padding:18px 20px; border-right:1px solid #eef1f4; }
+        .summary-item:last-child { border-right:none; }
+        .summary-item h4 { margin:0 0 8px 0; font-size:0.95em; color:#666; }
+        .summary-item .value { font-size:1.45em; font-weight:700; }
+        .value.debit { color:#dc3545; }
+        .value.credit { color:#28a745; }
+        .value.balance { color:#0056b3; }
+        .toolbar { display:flex; justify-content:space-between; align-items:center; gap:15px; flex-wrap:wrap; margin-bottom:18px; }
+        .statement-meta { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:14px; margin-bottom:18px; }
+        .meta-box { background:#f8fafc; border:1px solid #e8edf3; border-radius:10px; padding:12px 14px; }
+        .meta-box .label { display:block; font-size:0.82em; color:#666; margin-bottom:6px; }
+        .meta-box .val { font-weight:600; color:#223; }
+        .empty-state { text-align:center; color:#666; padding:35px 20px; }
+        .statement-type-badge { display:inline-block; padding:4px 8px; border-radius:999px; font-size:0.78em; font-weight:600; }
+        .badge-debit { background:#fee2e2; color:#b91c1c; }
+        .badge-credit { background:#dcfce7; color:#15803d; }
+        .badge-opening { background:#dbeafe; color:#1d4ed8; }
+        .small-note { font-size:0.85em; color:#666; margin-top:10px; }
+        .header-right { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+        .print-only { display:none; }
+        @media print {
+            body { background:#fff; }
+            .container { box-shadow:none; margin:0; max-width:none; }
+            header, .filter-card, .page-actions, .screen-only, #systemMessage { display:none !important; }
+            .print-only { display:block; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Müşteri Ekstresi</h1>
+            <div class="header-right">
+                <span class="user-info">Hoş geldin, <span id="userEmail"></span>!</span>
+                <button type="button" class="button secondary" onclick="window.location.href='index.html'">Ana Menü</button>
+                <button id="logoutButton" class="button secondary">Çıkış Yap</button>
+            </div>
+        </header>
+
+        <div id="systemMessage" class="message"></div>
+
+        <div class="filter-card screen-only">
+            <h2 class="section-title" style="margin-top:0;">Ekstre Filtresi</h2>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="customerSelect">Müşteri</label>
+                    <select id="customerSelect">
+                        <option value="">Müşteri seçiniz...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="projectSelect">Proje (Opsiyonel)</label>
+                    <select id="projectSelect">
+                        <option value="">Tüm Projeler</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="statementScope">Kapsam</label>
+                    <select id="statementScope">
+                        <option value="all">Resmi + Gayri Resmi</option>
+                        <option value="official">Sadece Resmi</option>
+                        <option value="unofficial">Sadece Gayri Resmi</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="startDate">Başlangıç Tarihi</label>
+                    <input type="date" id="startDate">
+                </div>
+                <div class="form-group">
+                    <label for="endDate">Bitiş Tarihi</label>
+                    <input type="date" id="endDate">
+                </div>
+                <div class="form-group">
+                    <label for="companyTitle">Ekstre Başlığı</label>
+                    <input type="text" id="companyTitle" value="KEYFORCE Müşteri Ekstresi">
+                </div>
+                <div class="form-group full-width" style="justify-content:flex-start; gap:12px;">
+                    <button id="generateButton" class="button primary" type="button">Ekstreyi Hazırla</button>
+                    <button id="pdfButton" class="button secondary" type="button">PDF İndir</button>
+                    <button id="printButton" class="button secondary" type="button">Yazdır</button>
+                </div>
+            </div>
+            <div class="small-note">Not: Bakiye TL bazında hesaplanır. Dövizli sözleşme ve tahsilatlar, sistemde kayıtlı kur/TL karşılığı üzerinden özetlenir.</div>
+        </div>
+
+        <div class="print-only" id="printHeader" style="margin-bottom:20px;"></div>
+
+        <div class="summary-strip" id="summaryStrip">
+            <div class="summary-item"><h4>Açılış Bakiyesi</h4><div class="value balance" id="openingBalance">0,00 ₺</div></div>
+            <div class="summary-item"><h4>Dönem Borç</h4><div class="value debit" id="periodDebit">0,00 ₺</div></div>
+            <div class="summary-item"><h4>Dönem Tahsilat</h4><div class="value credit" id="periodCredit">0,00 ₺</div></div>
+            <div class="summary-item"><h4>Kapanış Bakiyesi</h4><div class="value balance" id="closingBalance">0,00 ₺</div></div>
+        </div>
+
+        <div class="statement-card">
+            <div class="toolbar">
+                <div>
+                    <h2 class="section-title" style="margin:0; border-bottom:none; padding-bottom:0;">Ekstre Önizleme</h2>
+                    <div class="small-note" id="statementCaption">Henüz ekstre hazırlanmadı.</div>
+                </div>
+                <div class="page-actions">
+                    <button id="quickPdfButton" class="button primary" type="button">PDF İndir</button>
+                </div>
+            </div>
+
+            <div class="statement-meta" id="statementMeta">
+                <div class="meta-box"><span class="label">Müşteri</span><span class="val" id="metaCustomer">-</span></div>
+                <div class="meta-box"><span class="label">Proje</span><span class="val" id="metaProject">Tüm Projeler</span></div>
+                <div class="meta-box"><span class="label">Dönem</span><span class="val" id="metaRange">-</span></div>
+                <div class="meta-box"><span class="label">Kapsam</span><span class="val" id="metaScope">Resmi + Gayri Resmi</span></div>
+            </div>
+
+            <div class="financial-table-container">
+                <table class="financial-table">
+                    <thead>
+                        <tr>
+                            <th>Tarih</th>
+                            <th>Proje</th>
+                            <th>İşlem</th>
+                            <th>Açıklama</th>
+                            <th>Detay</th>
+                            <th>Borç</th>
+                            <th>Alacak</th>
+                            <th>Bakiye</th>
+                        </tr>
+                    </thead>
+                    <tbody id="statementBody">
+                        <tr><td colspan="8" class="empty-state">Ekstre oluşturmak için filtre seçip “Ekstreyi Hazırla” butonuna bas.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="info-note" style="margin-top:18px;">
+                <strong>Ekstre notu:</strong> Bu belgede <strong>Borç</strong> müşteri hesabına işlenen sözleşme / anlaşma tutarını, <strong>Alacak</strong> ise yapılan tahsilatları ifade eder. Bakiye TL karşılığı olarak izlenir.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBNwSpbpNuQQ4nTjDAlB6izu5IgkEZxDL0",
+            authDomain: "projetakip-e3a75.firebaseapp.com",
+            projectId: "projetakip-e3a75",
+            storageBucket: "projetakip-e3a75.firebasestorage.app",
+            messagingSenderId: "924120275674",
+            appId: "1:924120275674:web:c8ad3d4c998333d9fd23e3"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        let currentUserId = null;
+        let projectsCache = [];
+        let lastStatement = null;
+
+        const userEmailSpan = document.getElementById('userEmail');
+        const logoutButton = document.getElementById('logoutButton');
+        const systemMessageDiv = document.getElementById('systemMessage');
+        const customerSelect = document.getElementById('customerSelect');
+        const projectSelect = document.getElementById('projectSelect');
+        const statementScope = document.getElementById('statementScope');
+        const startDateInput = document.getElementById('startDate');
+        const endDateInput = document.getElementById('endDate');
+        const companyTitleInput = document.getElementById('companyTitle');
+        const generateButton = document.getElementById('generateButton');
+        const pdfButton = document.getElementById('pdfButton');
+        const quickPdfButton = document.getElementById('quickPdfButton');
+        const printButton = document.getElementById('printButton');
+        const statementBody = document.getElementById('statementBody');
+        const statementCaption = document.getElementById('statementCaption');
+        const metaCustomer = document.getElementById('metaCustomer');
+        const metaProject = document.getElementById('metaProject');
+        const metaRange = document.getElementById('metaRange');
+        const metaScope = document.getElementById('metaScope');
+        const openingBalanceEl = document.getElementById('openingBalance');
+        const periodDebitEl = document.getElementById('periodDebit');
+        const periodCreditEl = document.getElementById('periodCredit');
+        const closingBalanceEl = document.getElementById('closingBalance');
+        const printHeader = document.getElementById('printHeader');
+
+        auth.onAuthStateChanged(async (user) => {
+            if (!user) {
+                window.location.href = 'auth.html';
+                return;
+            }
+
+            currentUserId = user.uid;
+            userEmailSpan.textContent = user.email;
+            setDefaultDates();
+            hydrateQueryFilters();
+            await loadProjects();
+            if (customerSelect.value) await generateStatement();
+        });
+
+        logoutButton.addEventListener('click', async () => { try { await auth.signOut(); } catch (e) {} });
+        customerSelect.addEventListener('change', () => populateProjectSelect(customerSelect.value));
+        generateButton.addEventListener('click', generateStatement);
+        pdfButton.addEventListener('click', exportPdf);
+        quickPdfButton.addEventListener('click', exportPdf);
+        printButton.addEventListener('click', () => window.print());
+
+        function showSystemMessage(message, isError = false) {
+            systemMessageDiv.textContent = message;
+            systemMessageDiv.className = 'message ' + (isError ? 'error-message' : 'success');
+            systemMessageDiv.classList.add('show');
+            setTimeout(() => systemMessageDiv.classList.remove('show'), 4000);
+        }
+
+        function setDefaultDates() {
+            const today = new Date();
+            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+            startDateInput.value = formatDateInput(firstDay);
+            endDateInput.value = formatDateInput(today);
+        }
+
+        function hydrateQueryFilters() {
+            const params = new URLSearchParams(window.location.search);
+            const qCustomer = params.get('customer');
+            const qProjectId = params.get('projectId');
+            if (qCustomer) customerSelect.dataset.prefill = qCustomer;
+            if (qProjectId) projectSelect.dataset.prefill = qProjectId;
+        }
+
+        async function loadProjects() {
+            const snap = await db.collection('projects').where('ownerId', '==', currentUserId).orderBy('projectName').get();
+            projectsCache = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            const customerNames = [...new Set(projectsCache.map(p => (p.customerName || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
+            customerSelect.innerHTML = '<option value="">Müşteri seçiniz...</option>';
+            customerNames.forEach(name => customerSelect.innerHTML += `<option value="${escapeHtmlAttr(name)}">${escapeHtml(name)}</option>`);
+
+            if (customerSelect.dataset.prefill && customerNames.includes(customerSelect.dataset.prefill)) {
+                customerSelect.value = customerSelect.dataset.prefill;
+            }
+            populateProjectSelect(customerSelect.value);
+        }
+
+        function populateProjectSelect(customerName) {
+            const relevant = projectsCache.filter(p => !customerName || p.customerName === customerName).sort((a, b) => (a.projectName || '').localeCompare((b.projectName || ''), 'tr'));
+            projectSelect.innerHTML = '<option value="">Tüm Projeler</option>';
+            relevant.forEach(p => projectSelect.innerHTML += `<option value="${p.id}">${escapeHtml(p.projectName || 'Adsız Proje')}</option>`);
+            if (projectSelect.dataset.prefill && relevant.some(p => p.id === projectSelect.dataset.prefill)) {
+                projectSelect.value = projectSelect.dataset.prefill;
+                delete projectSelect.dataset.prefill;
+            }
+        }
+
+        function getContractBreakdown(project) {
+            const officialAmount = parseFloat(project.contractOfficialAmount ?? project.contractAmount ?? 0) || 0;
+            const officialCurrency = project.contractOfficialCurrency || project.contractCurrency || 'TRY';
+            const officialExchangeRate = parseFloat(project.contractOfficialExchangeRate ?? project.contractExchangeRate ?? 1) || 1;
+            const unofficialAmount = parseFloat(project.contractUnofficialAmount ?? 0) || 0;
+            const unofficialCurrency = project.contractUnofficialCurrency || 'TRY';
+            const unofficialExchangeRate = parseFloat(project.contractUnofficialExchangeRate ?? 1) || 1;
+            const officialTL = officialCurrency === 'TRY' ? officialAmount : officialAmount * officialExchangeRate;
+            const unofficialTL = unofficialCurrency === 'TRY' ? unofficialAmount : unofficialAmount * unofficialExchangeRate;
+            return {
+                official: { amount: officialAmount, currency: officialCurrency, exchangeRate: officialExchangeRate, amountTL: officialTL },
+                unofficial: { amount: unofficialAmount, currency: unofficialCurrency, exchangeRate: unofficialExchangeRate, amountTL: unofficialTL },
+                totalTL: officialTL + unofficialTL
+            };
+        }
+
+        function getProjectBaseDate(project) {
+            if (project.contractDate?.toDate) return project.contractDate.toDate();
+            if (project.createdAt?.toDate) return project.createdAt.toDate();
+            return new Date();
+        }
+
+        function getScopeLabel(scope) {
+            if (scope === 'official') return 'Sadece Resmi';
+            if (scope === 'unofficial') return 'Sadece Gayri Resmi';
+            return 'Resmi + Gayri Resmi';
+        }
+
+        function inRange(date, startDate, endDate) {
+            if (!(date instanceof Date) || isNaN(date)) return false;
+            if (startDate && date < startDate) return false;
+            if (endDate && date > endDate) return false;
+            return true;
+        }
+
+        function beforeRange(date, startDate) {
+            if (!(date instanceof Date) || isNaN(date)) return false;
+            if (!startDate) return false;
+            return date < startDate;
+        }
+
+        async function generateStatement() {
+            const customerName = customerSelect.value;
+            const selectedProjectId = projectSelect.value;
+            const scope = statementScope.value;
+            const startDate = startDateInput.value ? new Date(startDateInput.value + 'T00:00:00') : null;
+            const endDate = endDateInput.value ? new Date(endDateInput.value + 'T23:59:59') : null;
+
+            if (!customerName) {
+                showSystemMessage('Önce müşteri seçmelisin.', true);
+                return;
+            }
+            if (startDate && endDate && startDate > endDate) {
+                showSystemMessage('Başlangıç tarihi bitiş tarihinden büyük olamaz.', true);
+                return;
+            }
+
+            const candidateProjects = projectsCache.filter(p => p.customerName === customerName && (!selectedProjectId || p.id === selectedProjectId));
+            if (!candidateProjects.length) {
+                renderEmpty('Bu müşteri için uygun proje bulunamadı.');
+                return;
+            }
+
+            const rows = [];
+            let openingBalance = 0;
+            let periodDebit = 0;
+            let periodCredit = 0;
+
+            for (const project of candidateProjects) {
+                const contract = getContractBreakdown(project);
+                const contractDate = getProjectBaseDate(project);
+                const projectName = project.projectName || 'Adsız Proje';
+
+                const debitEntries = [];
+                if (scope !== 'unofficial' && contract.official.amountTL > 0) {
+                    debitEntries.push({
+                        date: contractDate,
+                        projectName,
+                        kind: 'Borç',
+                        kindLabel: 'Sözleşme Borcu',
+                        badge: 'badge-debit',
+                        description: 'Resmi sözleşme tutarı',
+                        detail: formatMoney(contract.official.amount, contract.official.currency, false) + (contract.official.currency !== 'TRY' ? ` (${formatTRY(contract.official.amountTL)})` : ''),
+                        debit: contract.official.amountTL,
+                        credit: 0
+                    });
+                }
+                if (scope !== 'official' && contract.unofficial.amountTL > 0) {
+                    debitEntries.push({
+                        date: contractDate,
+                        projectName,
+                        kind: 'Borç',
+                        kindLabel: 'Sözleşme Borcu',
+                        badge: 'badge-debit',
+                        description: 'Gayri resmi anlaşma tutarı',
+                        detail: formatMoney(contract.unofficial.amount, contract.unofficial.currency, false) + (contract.unofficial.currency !== 'TRY' ? ` (${formatTRY(contract.unofficial.amountTL)})` : ''),
+                        debit: contract.unofficial.amountTL,
+                        credit: 0
+                    });
+                }
+
+                for (const row of debitEntries) {
+                    if (beforeRange(row.date, startDate)) openingBalance += row.debit;
+                    else if (inRange(row.date, startDate, endDate)) { rows.push(row); periodDebit += row.debit; }
+                }
+
+                const colSnap = await db.collection('projects').doc(project.id).collection('collections').orderBy('date', 'asc').get();
+                colSnap.forEach(doc => {
+                    const d = doc.data();
+                    const recordType = d.recordType || 'Resmi';
+                    if (scope === 'official' && recordType === 'Gayri Resmi') return;
+                    if (scope === 'unofficial' && recordType !== 'Gayri Resmi') return;
+
+                    const amountTL = parseFloat(d.amountTL ?? d.amount ?? 0) || 0;
+                    const amount = parseFloat(d.amount ?? 0) || 0;
+                    const currency = d.currency || 'TRY';
+                    const rowDate = d.date?.toDate ? d.date.toDate() : new Date();
+                    const paymentType = d.paymentType || 'Tahsilat';
+
+                    const row = {
+                        date: rowDate,
+                        projectName,
+                        kind: 'Alacak',
+                        kindLabel: 'Tahsilat',
+                        badge: 'badge-credit',
+                        description: d.description || paymentType,
+                        detail: `${recordType} / ${paymentType}` + (amount > 0 ? ` / ${formatMoney(amount, currency, false)}${currency !== 'TRY' ? ` (${formatTRY(amountTL)})` : ''}` : ''),
+                        debit: 0,
+                        credit: amountTL
+                    };
+
+                    if (beforeRange(rowDate, startDate)) openingBalance -= row.credit;
+                    else if (inRange(rowDate, startDate, endDate)) { rows.push(row); periodCredit += row.credit; }
+                });
+            }
+
+            rows.sort((a, b) => a.date - b.date || (b.debit - a.debit));
+            let runningBalance = openingBalance;
+            const renderedRows = [];
+
+            if (openingBalance !== 0) {
+                renderedRows.push(`
+                    <tr>
+                        <td>${formatDateTR(startDate || new Date())}</td>
+                        <td>-</td>
+                        <td><span class="statement-type-badge badge-opening">Açılış</span></td>
+                        <td>Devir bakiyesi</td>
+                        <td>Önceki dönemlerden devreden bakiye</td>
+                        <td style="text-align:right;">-</td>
+                        <td style="text-align:right;">-</td>
+                        <td style="text-align:right; font-weight:700;">${formatTRY(openingBalance)}</td>
+                    </tr>
+                `);
+            }
+
+            for (const row of rows) {
+                runningBalance += row.debit - row.credit;
+                renderedRows.push(`
+                    <tr>
+                        <td>${formatDateTR(row.date)}</td>
+                        <td>${escapeHtml(row.projectName)}</td>
+                        <td><span class="statement-type-badge ${row.badge}">${row.kindLabel}</span></td>
+                        <td>${escapeHtml(row.description)}</td>
+                        <td>${escapeHtml(row.detail)}</td>
+                        <td style="text-align:right; color:#dc3545; font-weight:600;">${row.debit ? formatTRY(row.debit) : '-'}</td>
+                        <td style="text-align:right; color:#28a745; font-weight:600;">${row.credit ? formatTRY(row.credit) : '-'}</td>
+                        <td style="text-align:right; font-weight:700;">${formatTRY(runningBalance)}</td>
+                    </tr>
+                `);
+            }
+
+            const closingBalance = openingBalance + periodDebit - periodCredit;
+            lastStatement = {
+                customerName,
+                selectedProjectName: selectedProjectId ? (candidateProjects[0]?.projectName || 'Seçili Proje') : 'Tüm Projeler',
+                startDate,
+                endDate,
+                scope,
+                rows,
+                openingBalance,
+                periodDebit,
+                periodCredit,
+                closingBalance,
+                generatedAt: new Date(),
+                title: companyTitleInput.value.trim() || 'KEYFORCE Müşteri Ekstresi'
+            };
+
+            openingBalanceEl.textContent = formatTRY(openingBalance);
+            periodDebitEl.textContent = formatTRY(periodDebit);
+            periodCreditEl.textContent = formatTRY(periodCredit);
+            closingBalanceEl.textContent = formatTRY(closingBalance);
+            metaCustomer.textContent = customerName;
+            metaProject.textContent = lastStatement.selectedProjectName;
+            metaRange.textContent = formatRangeLabel(startDate, endDate);
+            metaScope.textContent = getScopeLabel(scope);
+            statementCaption.textContent = `${customerName} için ${rows.length} hareket bulundu.`;
+            printHeader.innerHTML = `
+                <h2 style="margin:0 0 10px 0;">${escapeHtml(lastStatement.title)}</h2>
+                <div style="display:grid; grid-template-columns:repeat(2, minmax(220px, 1fr)); gap:10px; font-size:0.95em;">
+                    <div><strong>Müşteri:</strong> ${escapeHtml(customerName)}</div>
+                    <div><strong>Proje:</strong> ${escapeHtml(lastStatement.selectedProjectName)}</div>
+                    <div><strong>Dönem:</strong> ${escapeHtml(formatRangeLabel(startDate, endDate))}</div>
+                    <div><strong>Düzenleme:</strong> ${formatDateTimeTR(lastStatement.generatedAt)}</div>
+                </div>
+            `;
+
+            if (!renderedRows.length) {
+                renderEmpty('Seçilen filtrede hareket bulunamadı.', true);
+                return;
+            }
+
+            statementBody.innerHTML = renderedRows.join('');
+            showSystemMessage('Ekstre hazırlandı.', false);
+        }
+
+        function renderEmpty(message, keepSummary = false) {
+            statementBody.innerHTML = `<tr><td colspan="8" class="empty-state">${message}</td></tr>`;
+            statementCaption.textContent = message;
+            if (!keepSummary) {
+                openingBalanceEl.textContent = '0,00 ₺';
+                periodDebitEl.textContent = '0,00 ₺';
+                periodCreditEl.textContent = '0,00 ₺';
+                closingBalanceEl.textContent = '0,00 ₺';
+            }
+        }
+
+        function exportPdf() {
+            if (!lastStatement) {
+                showSystemMessage('Önce ekstreyi hazırlamalısın.', true);
+                return;
+            }
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const margin = 14;
+            let y = 16;
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16);
+            doc.text(lastStatement.title, margin, y);
+            y += 8;
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(10);
+            doc.text(`Müşteri: ${lastStatement.customerName}`, margin, y);
+            y += 5;
+            doc.text(`Proje: ${lastStatement.selectedProjectName}`, margin, y);
+            y += 5;
+            doc.text(`Dönem: ${formatRangeLabel(lastStatement.startDate, lastStatement.endDate)}`, margin, y);
+            y += 5;
+            doc.text(`Kapsam: ${getScopeLabel(lastStatement.scope)}`, margin, y);
+            y += 5;
+            doc.text(`Düzenleme: ${formatDateTimeTR(lastStatement.generatedAt)}`, margin, y);
+            y += 8;
+
+            doc.setFont('helvetica', 'bold');
+            doc.text(`Açılış: ${formatTRY(lastStatement.openingBalance)}`, margin, y);
+            doc.text(`Dönem Borç: ${formatTRY(lastStatement.periodDebit)}`, margin + 50, y);
+            doc.text(`Dönem Tahsilat: ${formatTRY(lastStatement.periodCredit)}`, margin + 105, y);
+            doc.text(`Kapanış: ${formatTRY(lastStatement.closingBalance)}`, margin + 165, y, { align: 'right' });
+            y += 8;
+
+            const body = [];
+            let running = lastStatement.openingBalance;
+            if (lastStatement.openingBalance !== 0) {
+                body.push([
+                    formatDateTR(lastStatement.startDate || new Date()),
+                    '-',
+                    'Açılış',
+                    'Devir bakiyesi',
+                    'Önceki dönemlerden devreden bakiye',
+                    '-',
+                    '-',
+                    formatTRY(running)
+                ]);
+            }
+
+            lastStatement.rows.forEach(row => {
+                running += row.debit - row.credit;
+                body.push([
+                    formatDateTR(row.date),
+                    row.projectName,
+                    row.kindLabel,
+                    row.description,
+                    row.detail,
+                    row.debit ? formatTRY(row.debit) : '-',
+                    row.credit ? formatTRY(row.credit) : '-',
+                    formatTRY(running)
+                ]);
+            });
+
+            doc.autoTable({
+                startY: y,
+                head: [['Tarih', 'Proje', 'İşlem', 'Açıklama', 'Detay', 'Borç', 'Alacak', 'Bakiye']],
+                body,
+                styles: { fontSize: 8, cellPadding: 2.2, overflow: 'linebreak' },
+                headStyles: { fillColor: [52, 73, 94] },
+                columnStyles: {
+                    0: { cellWidth: 19 },
+                    1: { cellWidth: 28 },
+                    2: { cellWidth: 18 },
+                    3: { cellWidth: 34 },
+                    4: { cellWidth: 36 },
+                    5: { halign: 'right', cellWidth: 18 },
+                    6: { halign: 'right', cellWidth: 18 },
+                    7: { halign: 'right', cellWidth: 20 }
+                },
+                margin: { left: margin, right: margin },
+                didDrawPage: function(data) {
+                    const pageCount = doc.internal.getNumberOfPages();
+                    doc.setFontSize(8);
+                    doc.text(`Sayfa ${doc.internal.getCurrentPageInfo().pageNumber} / ${pageCount}`, pageWidth - margin, doc.internal.pageSize.getHeight() - 6, { align: 'right' });
+                }
+            });
+
+            const finalY = doc.lastAutoTable.finalY || y;
+            doc.setFontSize(8.5);
+            doc.text('Not: Borç müşteri hesabına işlenen tutarı, alacak yapılan tahsilatları ifade eder. Bakiye TL karşılığı olarak izlenir.', margin, finalY + 8);
+
+            const safeName = `${slugify(lastStatement.customerName)}_ekstre_${formatDateInput(lastStatement.generatedAt)}`;
+            doc.save(`${safeName}.pdf`);
+        }
+
+        function formatDateInput(date) {
+            if (!(date instanceof Date) || isNaN(date)) return '';
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+        function formatDateTR(date) {
+            if (!(date instanceof Date) || isNaN(date)) return '-';
+            return date.toLocaleDateString('tr-TR');
+        }
+        function formatDateTimeTR(date) {
+            if (!(date instanceof Date) || isNaN(date)) return '-';
+            return date.toLocaleString('tr-TR');
+        }
+        function formatRangeLabel(startDate, endDate) {
+            if (!startDate && !endDate) return 'Tüm dönem';
+            if (startDate && endDate) return `${formatDateTR(startDate)} - ${formatDateTR(endDate)}`;
+            if (startDate) return `${formatDateTR(startDate)} ve sonrası`;
+            return `${formatDateTR(endDate)} ve öncesi`;
+        }
+        function formatTRY(value) {
+            return (Number(value) || 0).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+        }
+        function formatMoney(value, currency, withStyle = true) {
+            const amount = Number(value) || 0;
+            if (withStyle) return amount.toLocaleString('tr-TR', { style: 'currency', currency: currency || 'TRY' });
+            return amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (currency || 'TRY');
+        }
+        function slugify(text) {
+            return (text || 'ekstre').toString().toLowerCase('tr-TR')
+                .replace(/ı/g, 'i').replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ö/g, 'o').replace(/ç/g, 'c')
+                .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+        }
+        function escapeHtml(str) {
+            return String(str ?? '').replace(/[&<>"']/g, s => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[s]));
+        }
+        function escapeHtmlAttr(str) {
+            return escapeHtml(str).replace(/`/g, '&#96;');
+        }
+    </script>
+</body>
+</html>
