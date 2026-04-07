@@ -343,6 +343,11 @@
         let contractDateForSim = null;
         let contractAmountUSDForSim = 0;
 
+        let walletCache = [];
+
+        const expenseRecordTypeSelect = document.getElementById('expenseType');
+        const collectionRecordTypeInput = document.getElementById('collectionTypeInput');
+
         // Elements
         const userEmailSpan = document.getElementById('userEmail');
         const logoutButton = document.getElementById('logoutButton');
@@ -398,7 +403,7 @@
         const simContainer = document.getElementById('simContainer');
         const simDescription = document.getElementById('simDescription');
 
-        auth.onAuthStateChanged(user => {
+        auth.onAuthStateChanged(async user => {
             if (user) {
                 currentUserId = user.uid;
                 userEmailSpan.textContent = user.email;
@@ -406,9 +411,11 @@
                 const urlParams = new URLSearchParams(window.location.search);
                 currentProjectId = urlParams.get('id');
                 if (currentProjectId) {
-                    loadProjectDetails(currentProjectId);
-                    loadFinancialData(currentProjectId);
-                    loadWalletsForDropdown();
+                    await loadProjectDetails(currentProjectId);
+                    await loadWalletsForDropdown();
+                    await applyRecordTypeWalletBehavior('expense');
+                    await applyRecordTypeWalletBehavior('collection');
+                    await loadFinancialData(currentProjectId);
                 } else {
                     showSystemMessage('Proje ID bulunamadı.', true);
                     setTimeout(() => { window.location.href = 'index.html'; }, 3000);
@@ -437,13 +444,82 @@
         // --- CÜZDANLARI YÜKLE ---
         async function loadWalletsForDropdown() {
             const snap = await db.collection('accounts').where('ownerId', '==', currentUserId).get();
+
+            walletCache = snap.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+
             let optionsHtml = '<option value="">Hesap Seçiniz...</option>';
-            snap.forEach(doc => {
-                const d = doc.data();
-                optionsHtml += `<option value="${doc.id}">${d.name} (${d.currency})</option>`;
+            walletCache.forEach(wallet => {
+                optionsHtml += `<option value="${wallet.id}">${wallet.name} (${wallet.currency})</option>`;
             });
+
             expenseWalletSelect.innerHTML = optionsHtml;
             collectionWalletSelect.innerHTML = optionsHtml;
+        }
+
+        async function ensureGayriResmiWallet(currency = 'TRY') {
+            const safeCurrency = currency || 'TRY';
+            const walletName = `Gayri Resmi Kasa (${safeCurrency})`;
+
+            const existingWallet = walletCache.find(wallet =>
+                wallet.name === walletName && wallet.currency === safeCurrency
+            );
+
+            if (existingWallet) {
+                return existingWallet.id;
+            }
+
+            const newWalletRef = await db.collection('accounts').add({
+                ownerId: currentUserId,
+                name: walletName,
+                type: 'Şahsi Kasa',
+                currency: safeCurrency,
+                balance: 0,
+                isSystemGenerated: true,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            return newWalletRef.id;
+        }
+
+        async function applyRecordTypeWalletBehavior(formType) {
+            const isExpenseForm = formType === 'expense';
+
+            const recordType = isExpenseForm
+                ? expenseRecordTypeSelect.value
+                : collectionRecordTypeInput.value;
+
+            const currency = isExpenseForm
+                ? expenseCurrencySelect.value
+                : collectionCurrencySelect.value;
+
+            const walletSelect = isExpenseForm ? expenseWalletSelect : collectionWalletSelect;
+            const walletLabel = document.querySelector(
+                `label[for="${isExpenseForm ? 'expenseWallet' : 'collectionWallet'}"]`
+            );
+
+            if (recordType === 'Gayri Resmi') {
+                const gayriResmiWalletId = await ensureGayriResmiWallet(currency);
+                await loadWalletsForDropdown();
+                walletSelect.value = gayriResmiWalletId;
+                walletSelect.style.backgroundColor = '#fff3e0';
+
+                if (walletLabel) {
+                    walletLabel.textContent = isExpenseForm
+                        ? 'Ödeme Yapılan Gayri Resmi Kasa:'
+                        : 'Tahsil Edilen Gayri Resmi Kasa:';
+                }
+            } else {
+                walletSelect.style.backgroundColor = '';
+
+                if (walletLabel) {
+                    walletLabel.textContent = isExpenseForm
+                        ? 'Ödeme Yapılan Kasa/Banka:'
+                        : 'Tahsil Edilen Kasa/Banka:';
+                }
+            }
         }
 
         // --- KUR FONKSİYONU ---
@@ -659,19 +735,24 @@
 
             const payeeName = document.getElementById('expensePayee').value.trim(); // Trim added
             const description = document.getElementById('expenseDescription').value;
-            const walletId = document.getElementById('expenseWallet').value;
+            let walletId = document.getElementById('expenseWallet').value;
             const amount = parseFloat(document.getElementById('expenseAmount').value);
             const currency = document.getElementById('expenseCurrency').value;
             const exchangeRate = parseFloat(document.getElementById('exchangeRate').value);
             const date = document.getElementById('expenseDate').value;
             const recordType = document.getElementById('expenseType').value;
 
-            if (!payeeName || !description || amount <= 0 || !date || !walletId) {
+            if (!payeeName || !description || amount <= 0 || !date || (recordType !== 'Gayri Resmi' && !walletId)) {
                 toggleLoading(false);
                 return showSystemMessage('Lütfen tüm alanları doldurun.', true);
             }
 
             try {
+                if (recordType === 'Gayri Resmi') {
+                    walletId = await ensureGayriResmiWallet(currency);
+                    await loadWalletsForDropdown();
+                }
+
                 const amountTL = amount * exchangeRate;
                 const batch = db.batch();
 
@@ -741,6 +822,8 @@
                 await batch.commit();
                 showSystemMessage('Harcama kaydedildi, bakiyeler güncellendi.');
                 addExpenseForm.reset();
+                expenseDateInput.value = new Date().toISOString().split('T')[0];
+                await applyRecordTypeWalletBehavior('expense');
                 loadFinancialData(currentProjectId);
 
             } catch (error) { showSystemMessage('Hata: ' + error.message, true); }
@@ -753,7 +836,7 @@
             toggleLoading(true);
 
             const description = document.getElementById('collectionDescription').value;
-            const walletId = document.getElementById('collectionWallet').value;
+            let walletId = document.getElementById('collectionWallet').value;
             const amount = parseFloat(document.getElementById('collectionAmount').value);
             const currency = document.getElementById('collectionCurrency').value;
             const exchangeRate = parseFloat(document.getElementById('collectionExchangeRate').value);
@@ -761,7 +844,7 @@
             const paymentType = document.getElementById('collectionPaymentType').value;
             const recordType = document.getElementById('collectionTypeInput').value;
 
-            if (!description || amount <= 0 || !date || !paymentType || !walletId) {
+            if (!description || amount <= 0 || !date || !paymentType || (recordType !== 'Gayri Resmi' && !walletId)) {
                 toggleLoading(false);
                 return showSystemMessage("Eksik bilgi.", true);
             }
@@ -777,6 +860,11 @@
             }
 
             try {
+                if (recordType === 'Gayri Resmi') {
+                    walletId = await ensureGayriResmiWallet(currency);
+                    await loadWalletsForDropdown();
+                }
+
                 const amountTL = amount * exchangeRate;
                 const batch = db.batch();
 
@@ -846,6 +934,8 @@
                 await batch.commit();
                 showSystemMessage(`Tahsilat eklendi!`, false);
                 addCollectionForm.reset();
+                collectionDateInput.value = new Date().toISOString().split('T')[0];
+                await applyRecordTypeWalletBehavior('collection');
                 loadFinancialData(currentProjectId);
 
             } catch (error) { showSystemMessage('Hata: ' + error.message, true); }
@@ -866,6 +956,7 @@
                     if (rate) expenseExchangeRateInput.value = rate.toFixed(4);
                 }
             }
+            await applyRecordTypeWalletBehavior('expense');
         });
 
         expenseDateInput.addEventListener('change', async () => {
@@ -891,6 +982,7 @@
                     if (rate) collectionExchangeRateInput.value = rate.toFixed(4);
                 }
             }
+            await applyRecordTypeWalletBehavior('collection');
         });
 
         collectionDateInput.addEventListener('change', async () => {
@@ -915,6 +1007,14 @@
                 collectionExchangeRateGroup.style.display = 'none';
             }
             collectionCurrencySelect.dispatchEvent(new Event('change'));
+        });
+
+        expenseRecordTypeSelect.addEventListener('change', async () => {
+            await applyRecordTypeWalletBehavior('expense');
+        });
+
+        collectionRecordTypeInput.addEventListener('change', async () => {
+            await applyRecordTypeWalletBehavior('collection');
         });
 
         async function deleteFinancialItem(collectionName, docId, description) {
