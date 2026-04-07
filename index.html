@@ -415,7 +415,62 @@
                 walletList.appendChild(div);
             });
         }
-        window.deleteWallet = async (id) => { if(confirm('Silinsin mi?')) { await db.collection('accounts').doc(id).delete(); loadWallets(); } };
+        
+        async function canDeleteWallet(walletId) {
+            const accRef = db.collection('accounts').doc(walletId);
+            const accSnap = await accRef.get();
+
+            if (!accSnap.exists) {
+                return { ok: false, reason: 'Hesap bulunamadı.' };
+            }
+
+            const acc = accSnap.data();
+
+            if ((acc.balance || 0) !== 0) {
+                return { ok: false, reason: 'Bakiyesi sıfır olmayan hesap silinemez.' };
+            }
+
+            const [expenseSnap, collectionSnap, bankOutSnap, bankInSnap] = await Promise.all([
+                db.collectionGroup('expenses').where('walletId', '==', walletId).limit(1).get(),
+                db.collectionGroup('collections').where('walletId', '==', walletId).limit(1).get(),
+                db.collection('bank_transactions').where('ownerId', '==', currentUserId).where('sourceId', '==', walletId).limit(1).get(),
+                db.collection('bank_transactions').where('ownerId', '==', currentUserId).where('targetId', '==', walletId).limit(1).get()
+            ]);
+
+            if (!expenseSnap.empty) {
+                return { ok: false, reason: 'Bu hesap proje harcamalarında kullanılmış. Silmek yerine hesap kartını koru.' };
+            }
+
+            if (!collectionSnap.empty) {
+                return { ok: false, reason: 'Bu hesap proje tahsilatlarında kullanılmış. Silmek yerine hesap kartını koru.' };
+            }
+
+            if (!bankOutSnap.empty || !bankInSnap.empty) {
+                return { ok: false, reason: 'Bu hesap banka hareketlerinde kullanılmış. Silmek yerine hesap kartını koru.' };
+            }
+
+            return { ok: true, accountName: acc.name || 'Hesap' };
+        }
+
+        window.deleteWallet = async (id) => {
+            try {
+                const check = await canDeleteWallet(id);
+
+                if (!check.ok) {
+                    return showSystemMessage(check.reason, true);
+                }
+
+                if (!confirm(`"${check.accountName}" hesabı silinsin mi? Bu işlem geri alınamaz.`)) return;
+
+                await db.collection('accounts').doc(id).delete();
+                showSystemMessage('Hesap silindi.');
+                loadWallets();
+            } catch (err) {
+                console.error(err);
+                showSystemMessage('Hesap silme hatası: ' + err.message, true);
+            }
+        };
+
 
         // --- 3. EV & ŞAHSİ ---
         addPersonalExpenseForm.addEventListener('submit', async (e) => {
