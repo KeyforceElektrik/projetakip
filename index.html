@@ -312,6 +312,27 @@
             setTimeout(() => systemMessageDiv.classList.remove('show'), 4000);
         }
 
+        function normalizeLegacyContract(project) {
+            const officialAmount = parseFloat(project.contractOfficialAmount ?? project.contractAmount ?? 0) || 0;
+            const officialCurrency = project.contractOfficialCurrency || project.contractCurrency || 'TRY';
+            const officialExchangeRate = parseFloat(project.contractOfficialExchangeRate ?? project.contractExchangeRate ?? 1) || 1;
+            const unofficialAmount = parseFloat(project.contractUnofficialAmount ?? 0) || 0;
+            const unofficialCurrency = project.contractUnofficialCurrency || 'TRY';
+            const unofficialExchangeRate = parseFloat(project.contractUnofficialExchangeRate ?? 1) || 1;
+            const officialTL = officialCurrency === 'TRY' ? officialAmount : officialAmount * officialExchangeRate;
+            const unofficialTL = unofficialCurrency === 'TRY' ? unofficialAmount : unofficialAmount * unofficialExchangeRate;
+            return { officialAmount, officialCurrency, officialExchangeRate, unofficialAmount, unofficialCurrency, unofficialExchangeRate, officialTL, unofficialTL, totalTL: officialTL + unofficialTL };
+        }
+
+        function formatContractBreakdownHtml(contract) {
+            const line = (label, amount, currency, tl) => {
+                const original = amount.toLocaleString('tr-TR', { style: 'currency', currency });
+                const detail = currency === 'TRY' ? original : `${original} <small style="color:#666;">(${tl.toLocaleString('tr-TR', { style:'currency', currency:'TRY' })})</small>`;
+                return `<div><strong>${label}:</strong> ${detail}</div>`;
+            };
+            return `${line('R', contract.officialAmount, contract.officialCurrency, contract.officialTL)}${line('G', contract.unofficialAmount, contract.unofficialCurrency, contract.unofficialTL)}<div style="margin-top:4px; padding-top:4px; border-top:1px dashed #ddd;"><strong>Toplam:</strong> ${contract.totalTL.toLocaleString('tr-TR', { style:'currency', currency:'TRY' })}</div>`;
+        }
+
         // --- 1. PROJELER ---
         addProjectForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -323,6 +344,8 @@
                 await db.collection('projects').add({
                     projectName: name, customerName: customer, categories: cats, status: 'Başlamadı',
                     contractAmount: 0, contractCurrency: 'TRY', contractExchangeRate: 1,
+                    contractOfficialAmount: 0, contractOfficialCurrency: 'TRY', contractOfficialExchangeRate: 1,
+                    contractUnofficialAmount: 0, contractUnofficialCurrency: 'TRY', contractUnofficialExchangeRate: 1,
                     ownerId: currentUserId, createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
                 showSystemMessage('Proje eklendi!');
