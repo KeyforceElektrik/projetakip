@@ -56,7 +56,7 @@
             <p><strong>Müşteri:</strong> <span id="projectSummaryCustomer"></span></p>
             <p><strong>Kategoriler:</strong> <span id="projectSummaryCategories"></span></p>
             <p><strong>Durum:</strong> <span id="projectSummaryStatus" class="status-badge"></span></p>
-            <p><strong>Sözleşme Bedeli:</strong> <span id="projectSummaryContractAmount" style="font-size: 1.2em; color: #0056b3;"></span></p>
+            <p><strong>Sözleşme Özeti:</strong> <span id="projectSummaryContractAmount" style="font-size: 1.05em; color: #0056b3;"></span></p>
             <p><strong>Sözleşme Tarihi:</strong> <span id="projectSummaryContractDate"></span></p>
         </div>
 
@@ -80,24 +80,49 @@
                 </select>
             </div>
             <div class="form-group">
-                <label for="updateContractAmount">Sözleşme Bedeli:</label>
-                <input type="number" id="updateContractAmount" step="0.01" value="0" required>
+                <label for="updateContractDate">Sözleşme Tarihi:</label>
+                <input type="date" id="updateContractDate" required>
+            </div>
+
+            <div class="form-group" style="grid-column:1/-1; margin-top:10px; padding:15px; background:#eef7ff; border:1px solid #cfe8ff; border-radius:8px;">
+                <strong style="color:#0d47a1;">Resmi Anlaşma</strong>
             </div>
             <div class="form-group">
-                <label for="updateContractCurrency">Para Birimi:</label>
-                <select id="updateContractCurrency" required>
+                <label for="updateOfficialContractAmount">Resmi Tutar:</label>
+                <input type="number" id="updateOfficialContractAmount" step="0.01" value="0" required>
+            </div>
+            <div class="form-group">
+                <label for="updateOfficialContractCurrency">Resmi Para Birimi:</label>
+                <select id="updateOfficialContractCurrency" required>
                     <option value="TRY">TL</option>
                     <option value="USD">USD</option>
                     <option value="EUR">EUR</option>
                 </select>
             </div>
             <div class="form-group">
-                <label for="updateContractDate">Sözleşme Tarihi:</label>
-                <input type="date" id="updateContractDate" required>
+                <label for="updateOfficialContractExchangeRate">Resmi Kur (1 USD/EUR = ... TL):</label>
+                <input type="number" id="updateOfficialContractExchangeRate" step="0.0001" value="1" required>
+                <small>Tarih ve para birimi seçildiğinde otomatik gelir.</small>
+            </div>
+
+            <div class="form-group" style="grid-column:1/-1; margin-top:10px; padding:15px; background:#fff8e1; border:1px solid #ffe0b2; border-radius:8px;">
+                <strong style="color:#e65100;">Gayri Resmi Anlaşma</strong>
             </div>
             <div class="form-group">
-                <label for="updateContractExchangeRate">Kur (1 USD/EUR = ... TL):</label>
-                <input type="number" id="updateContractExchangeRate" step="0.0001" value="1" required>
+                <label for="updateUnofficialContractAmount">Gayri Resmi Tutar:</label>
+                <input type="number" id="updateUnofficialContractAmount" step="0.01" value="0" required>
+            </div>
+            <div class="form-group">
+                <label for="updateUnofficialContractCurrency">Gayri Resmi Para Birimi:</label>
+                <select id="updateUnofficialContractCurrency" required>
+                    <option value="TRY">TL</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="updateUnofficialContractExchangeRate">Gayri Resmi Kur (1 USD/EUR = ... TL):</label>
+                <input type="number" id="updateUnofficialContractExchangeRate" step="0.0001" value="1" required>
                 <small>Tarih ve para birimi seçildiğinde otomatik gelir.</small>
             </div>
             <div class="form-group full-width">
@@ -365,10 +390,13 @@
         const updateProjectNameInput = document.getElementById('updateProjectName');
         const updateCustomerNameInput = document.getElementById('updateCustomerName');
         const updateStatusSelect = document.getElementById('updateStatus');
-        const updateContractAmountInput = document.getElementById('updateContractAmount');
-        const updateContractCurrencySelect = document.getElementById('updateContractCurrency');
         const updateContractDateInput = document.getElementById('updateContractDate');
-        const updateContractExchangeRateInput = document.getElementById('updateContractExchangeRate');
+        const updateOfficialContractAmountInput = document.getElementById('updateOfficialContractAmount');
+        const updateOfficialContractCurrencySelect = document.getElementById('updateOfficialContractCurrency');
+        const updateOfficialContractExchangeRateInput = document.getElementById('updateOfficialContractExchangeRate');
+        const updateUnofficialContractAmountInput = document.getElementById('updateUnofficialContractAmount');
+        const updateUnofficialContractCurrencySelect = document.getElementById('updateUnofficialContractCurrency');
+        const updateUnofficialContractExchangeRateInput = document.getElementById('updateUnofficialContractExchangeRate');
         
         const tabButtons = document.querySelectorAll('.tab-button');
         const tabContents = document.querySelectorAll('.tab-content');
@@ -522,6 +550,57 @@
             }
         }
 
+        function normalizeLegacyContract(project) {
+            const officialAmount = parseFloat(project.contractOfficialAmount ?? project.contractAmount ?? 0) || 0;
+            const officialCurrency = project.contractOfficialCurrency || project.contractCurrency || 'TRY';
+            const officialExchangeRate = parseFloat(project.contractOfficialExchangeRate ?? project.contractExchangeRate ?? 1) || 1;
+
+            const unofficialAmount = parseFloat(project.contractUnofficialAmount ?? 0) || 0;
+            const unofficialCurrency = project.contractUnofficialCurrency || 'TRY';
+            const unofficialExchangeRate = parseFloat(project.contractUnofficialExchangeRate ?? 1) || 1;
+
+            const officialTL = officialCurrency === 'TRY' ? officialAmount : officialAmount * officialExchangeRate;
+            const unofficialTL = unofficialCurrency === 'TRY' ? unofficialAmount : unofficialAmount * unofficialExchangeRate;
+            const totalTL = officialTL + unofficialTL;
+
+            return {
+                officialAmount,
+                officialCurrency,
+                officialExchangeRate,
+                unofficialAmount,
+                unofficialCurrency,
+                unofficialExchangeRate,
+                officialTL,
+                unofficialTL,
+                totalTL
+            };
+        }
+
+        function formatContractLine(amount, currency, tlAmount, label) {
+            const original = amount.toLocaleString('tr-TR', { style: 'currency', currency });
+            const tl = tlAmount.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+            const detail = currency === 'TRY' ? original : `${original} <small style="color:#666;">(${tl})</small>`;
+            return `<div style="margin-bottom:4px;"><strong>${label}:</strong> ${detail}</div>`;
+        }
+
+        function formatContractSummaryHTML(contract) {
+            return `
+                ${formatContractLine(contract.officialAmount, contract.officialCurrency, contract.officialTL, 'Resmi')}
+                ${formatContractLine(contract.unofficialAmount, contract.unofficialCurrency, contract.unofficialTL, 'Gayri Resmi')}
+                <div style="margin-top:6px; padding-top:6px; border-top:1px dashed #aaddff;"><strong>Toplam:</strong> ${contract.totalTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })}</div>
+            `;
+        }
+
+        async function updateContractRateField(currency, date, inputEl) {
+            if (currency === 'TRY') {
+                inputEl.value = '1';
+                return;
+            }
+            if (!date) return;
+            const rate = await fetchCurrencyRates(date, currency);
+            if (rate) inputEl.value = rate.toFixed(4);
+        }
+
         // --- KUR FONKSİYONU ---
         async function fetchCurrencyRates(dateString, currencyCode) {
             try {
@@ -629,7 +708,8 @@
                 const projectDoc = await db.collection('projects').doc(projectId).get();
                 if (projectDoc.exists && projectDoc.data().ownerId === currentUserId) {
                     const project = projectDoc.data();
-                    currentCustomerName = project.customerName; 
+                    const contract = normalizeLegacyContract(project);
+                    currentCustomerName = project.customerName;
 
                     projectHeaderTitle.textContent = `${project.projectName} Detayları`;
                     projectSummaryName.textContent = project.projectName;
@@ -638,42 +718,28 @@
                     projectSummaryStatus.textContent = project.status;
                     projectSummaryStatus.className = 'status-badge status-' + project.status.toLowerCase().replace(/ /g, '');
 
-                    let contractDisplay = '';
-                    const amount = project.contractAmount || 0;
-                    const currency = project.contractCurrency || 'TRY';
-                    let amountTL = amount;
-                    const rate = project.contractExchangeRate || 1;
-
-                    if (currency !== 'TRY') amountTL = amount * rate;
-
                     if (project.contractDate) {
                         const date = project.contractDate.toDate ? project.contractDate.toDate() : new Date(project.contractDate);
                         projectSummaryContractDate.textContent = date.toLocaleDateString('tr-TR');
                         updateContractDateInput.value = date.toISOString().split('T')[0];
                         contractDateForSim = date;
-                        
-                        if (currency !== 'USD') {
-                            const dateStr = date.toISOString().split('T')[0];
-                            fetchCurrencyRates(dateStr, 'USD').then(usdRate => {
-                                if(usdRate) contractAmountUSDForSim = amountTL / usdRate;
-                            });
-                        } else {
-                            contractAmountUSDForSim = amount;
-                        }
+                    } else {
+                        projectSummaryContractDate.textContent = '-';
+                        updateContractDateInput.value = '';
+                        contractDateForSim = null;
                     }
 
-                    const fmtOriginal = amount.toLocaleString('tr-TR', { style: 'currency', currency: currency });
-                    const fmtTL = amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                    if (currency !== 'TRY') contractDisplay = `${fmtOriginal} <small style="color:#666;">(${fmtTL})</small>`;
-                    else contractDisplay = fmtOriginal;
-                    projectSummaryContractAmount.innerHTML = contractDisplay;
+                    projectSummaryContractAmount.innerHTML = formatContractSummaryHTML(contract);
 
                     updateProjectNameInput.value = project.projectName;
                     updateCustomerNameInput.value = project.customerName;
                     updateStatusSelect.value = project.status;
-                    updateContractAmountInput.value = project.contractAmount || 0;
-                    updateContractCurrencySelect.value = project.contractCurrency || 'TRY';
-                    updateContractExchangeRateInput.value = project.contractExchangeRate || 1;
+                    updateOfficialContractAmountInput.value = contract.officialAmount;
+                    updateOfficialContractCurrencySelect.value = contract.officialCurrency;
+                    updateOfficialContractExchangeRateInput.value = contract.officialExchangeRate;
+                    updateUnofficialContractAmountInput.value = contract.unofficialAmount;
+                    updateUnofficialContractCurrencySelect.value = contract.unofficialCurrency;
+                    updateUnofficialContractExchangeRateInput.value = contract.unofficialExchangeRate;
                 }
             } catch (error) { console.error(error); }
         }
@@ -691,37 +757,69 @@
         });
 
         // Event Listeners (Kur)
-        updateContractCurrencySelect.addEventListener('change', async () => {
-            const curr = updateContractCurrencySelect.value;
-            const date = updateContractDateInput.value;
-            if (curr === 'TRY') updateContractExchangeRateInput.value = '1';
-            else if (date) {
-                const rate = await fetchCurrencyRates(date, curr);
-                if (rate) updateContractExchangeRateInput.value = rate.toFixed(4);
-            }
+        updateOfficialContractCurrencySelect.addEventListener('change', async () => {
+            await updateContractRateField(
+                updateOfficialContractCurrencySelect.value,
+                updateContractDateInput.value,
+                updateOfficialContractExchangeRateInput
+            );
+        });
+
+        updateUnofficialContractCurrencySelect.addEventListener('change', async () => {
+            await updateContractRateField(
+                updateUnofficialContractCurrencySelect.value,
+                updateContractDateInput.value,
+                updateUnofficialContractExchangeRateInput
+            );
         });
 
         updateContractDateInput.addEventListener('change', async () => {
-            const curr = updateContractCurrencySelect.value;
-            const date = updateContractDateInput.value;
-            if (curr !== 'TRY' && date) {
-                const rate = await fetchCurrencyRates(date, curr);
-                if (rate) updateContractExchangeRateInput.value = rate.toFixed(4);
-            }
+            await updateContractRateField(
+                updateOfficialContractCurrencySelect.value,
+                updateContractDateInput.value,
+                updateOfficialContractExchangeRateInput
+            );
+            await updateContractRateField(
+                updateUnofficialContractCurrencySelect.value,
+                updateContractDateInput.value,
+                updateUnofficialContractExchangeRateInput
+            );
         });
 
         updateProjectForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             try {
-                await db.collection('projects').doc(currentProjectId).update({
+                const officialAmount = parseFloat(updateOfficialContractAmountInput.value) || 0;
+                const officialCurrency = updateOfficialContractCurrencySelect.value;
+                const officialExchangeRate = parseFloat(updateOfficialContractExchangeRateInput.value) || 1;
+                const unofficialAmount = parseFloat(updateUnofficialContractAmountInput.value) || 0;
+                const unofficialCurrency = updateUnofficialContractCurrencySelect.value;
+                const unofficialExchangeRate = parseFloat(updateUnofficialContractExchangeRateInput.value) || 1;
+
+                const officialTL = officialCurrency === 'TRY' ? officialAmount : officialAmount * officialExchangeRate;
+                const unofficialTL = unofficialCurrency === 'TRY' ? unofficialAmount : unofficialAmount * unofficialExchangeRate;
+                const totalTL = officialTL + unofficialTL;
+
+                const payload = {
                     projectName: updateProjectNameInput.value,
                     customerName: updateCustomerNameInput.value,
                     status: updateStatusSelect.value,
-                    contractAmount: parseFloat(updateContractAmountInput.value),
-                    contractCurrency: updateContractCurrencySelect.value,
-                    contractExchangeRate: parseFloat(updateContractExchangeRateInput.value),
-                    contractDate: firebase.firestore.Timestamp.fromDate(new Date(updateContractDateInput.value))
-                });
+                    contractOfficialAmount: officialAmount,
+                    contractOfficialCurrency: officialCurrency,
+                    contractOfficialExchangeRate: officialExchangeRate,
+                    contractUnofficialAmount: unofficialAmount,
+                    contractUnofficialCurrency: unofficialCurrency,
+                    contractUnofficialExchangeRate: unofficialExchangeRate,
+                    contractAmount: totalTL,
+                    contractCurrency: 'TRY',
+                    contractExchangeRate: 1
+                };
+
+                if (updateContractDateInput.value) {
+                    payload.contractDate = firebase.firestore.Timestamp.fromDate(new Date(updateContractDateInput.value));
+                }
+
+                await db.collection('projects').doc(currentProjectId).update(payload);
                 showSystemMessage('Proje güncellendi!');
                 loadProjectDetails(currentProjectId);
                 loadFinancialData(currentProjectId);
@@ -1032,10 +1130,8 @@
                 const projectDoc = await db.collection('projects').doc(projectId).get();
                 const project = projectDoc.data();
 
-                let contractAmountTL = project.contractAmount || 0;
-                if (project.contractCurrency !== 'TRY' && project.contractExchangeRate) {
-                    contractAmountTL = project.contractAmount * project.contractExchangeRate;
-                }
+                const contract = normalizeLegacyContract(project);
+                let contractAmountTL = contract.totalTL;
 
                 const expensesSnapshot = await db.collection('projects').doc(projectId).collection('expenses').orderBy('date', 'desc').get();
                 let totalExpenses = 0, tExpResmi = 0, tExpGayri = 0;
