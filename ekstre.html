@@ -211,7 +211,13 @@
 
         logoutButton.addEventListener('click', async () => { try { await auth.signOut(); } catch (e) {} });
         customerSelect.addEventListener('change', () => populateProjectSelect(customerSelect.value));
-        window.addEventListener('focus', loadProjects);
+
+        window.addEventListener('focus', async () => {
+            if (currentUserId) {
+                await loadProjects();
+            }
+        });
+
         generateButton.addEventListener('click', generateStatement);
         pdfButton.addEventListener('click', exportPdf);
         quickPdfButton.addEventListener('click', exportPdf);
@@ -239,26 +245,37 @@
             if (qProjectId) projectSelect.dataset.prefill = qProjectId;
         }
 
+        function normalizeCustomerName(value) {
+            return (value || '').replace(/\s+/g, ' ').trim();
+        }
+
         async function loadProjects() {
             const snap = await db.collection('projects').where('ownerId', '==', currentUserId).orderBy('projectName').get();
-            projectsCache = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            projectsCache = snap.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    customerName: normalizeCustomerName(data.customerName)
+                };
+            });
 
-            const customerNames = [...new Set(projectsCache.map(p => String(p.customerName || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
+            const customerNames = [...new Set(projectsCache.map(p => p.customerName).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
             customerSelect.innerHTML = '<option value="">Müşteri seçiniz...</option>';
-            if (customerNames.length === 0) {
-                statementCaption.textContent = 'Henüz projelerde müşteri adı görünmüyor. Yeni proje kaydından sonra sayfayı yenileyin.';
-            }
             customerNames.forEach(name => customerSelect.innerHTML += `<option value="${escapeHtmlAttr(name)}">${escapeHtml(name)}</option>`);
 
-            if (customerSelect.dataset.prefill && customerNames.includes(customerSelect.dataset.prefill)) {
-                customerSelect.value = customerSelect.dataset.prefill;
+            const prefillCustomer = normalizeCustomerName(customerSelect.dataset.prefill || '');
+            if (prefillCustomer && customerNames.includes(prefillCustomer)) {
+                customerSelect.value = prefillCustomer;
             }
             populateProjectSelect(customerSelect.value);
         }
 
         function populateProjectSelect(customerName) {
-            const normalizedCustomer = String(customerName || '').trim();
-            const relevant = projectsCache.filter(p => !normalizedCustomer || String(p.customerName || '').trim() === normalizedCustomer).sort((a, b) => (a.projectName || '').localeCompare((b.projectName || ''), 'tr'));
+            const normalizedCustomerName = normalizeCustomerName(customerName);
+            const relevant = projectsCache
+                .filter(p => !normalizedCustomerName || normalizeCustomerName(p.customerName) === normalizedCustomerName)
+                .sort((a, b) => (a.projectName || '').localeCompare((b.projectName || ''), 'tr'));
             projectSelect.innerHTML = '<option value="">Tüm Projeler</option>';
             relevant.forEach(p => projectSelect.innerHTML += `<option value="${p.id}">${escapeHtml(p.projectName || 'Adsız Proje')}</option>`);
             if (projectSelect.dataset.prefill && relevant.some(p => p.id === projectSelect.dataset.prefill)) {
@@ -309,7 +326,7 @@
         }
 
         async function generateStatement() {
-            const customerName = String(customerSelect.value || '').trim();
+            const customerName = normalizeCustomerName(customerSelect.value);
             const selectedProjectId = projectSelect.value;
             const scope = statementScope.value;
             const startDate = startDateInput.value ? new Date(startDateInput.value + 'T00:00:00') : null;
@@ -324,8 +341,7 @@
                 return;
             }
 
-            const normalizedCustomer = String(customerName || '').trim();
-            const candidateProjects = projectsCache.filter(p => String(p.customerName || '').trim() === normalizedCustomer && (!selectedProjectId || p.id === selectedProjectId));
+            const candidateProjects = projectsCache.filter(p => normalizeCustomerName(p.customerName) === customerName && (!selectedProjectId || p.id === selectedProjectId));
             if (!candidateProjects.length) {
                 renderEmpty('Bu müşteri için uygun proje bulunamadı.');
                 return;
