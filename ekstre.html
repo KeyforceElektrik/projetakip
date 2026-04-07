@@ -35,7 +35,7 @@
         .header-right { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
         .print-only { display:none; }
         @media print {
-            body { background:#fff; }
+            body { background:#fff; zoom:70%; }
             .container { box-shadow:none; margin:0; max-width:none; }
             header, .filter-card, .page-actions, .screen-only, #systemMessage { display:none !important; }
             .print-only { display:block; }
@@ -96,7 +96,6 @@
                     <button id="printButton" class="button secondary" type="button">Yazdır</button>
                 </div>
             </div>
-            <div class="small-note">Not: Ekstre mümkünse sözleşmenin ana para biriminde hazırlanır. Karışık para birimi varsa sistem TL özete döner. PDF için tarayıcının yazdır > PDF olarak kaydet seçeneği kullanılır.</div>
         </div>
 
         <div class="print-only" id="printHeader" style="margin-bottom:20px;"></div>
@@ -144,11 +143,7 @@
                         <tr><td colspan="8" class="empty-state">Ekstre oluşturmak için filtre seçip “Ekstreyi Hazırla” butonuna bas.</td></tr>
                     </tbody>
                 </table>
-            </div>
-            <div class="info-note" style="margin-top:18px;">
-                <strong>Ekstre notu:</strong> Bu belgede <strong>Borç</strong> müşteri hesabına işlenen sözleşme / anlaşma tutarını, <strong>Alacak</strong> ise yapılan tahsilatları ifade eder. Bakiye mümkünse sözleşmenin ana para biriminde izlenir; karışık kur durumlarında TL özet kullanılır.
-            </div>
-        </div>
+            </div>        </div>
     </div>
 
     <script>
