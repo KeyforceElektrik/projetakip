@@ -359,6 +359,41 @@
         }
 
 
+        const rateCache = {};
+
+        async function fetchUSDorEURRate(dateString, targetCurrency) {
+            if (targetCurrency === 'TRY') return 1;
+            const cacheKey = `${dateString}_${targetCurrency}`;
+            if (rateCache[cacheKey]) return rateCache[cacheKey];
+
+            try {
+                let dateObj = dateString ? new Date(dateString) : new Date();
+                if (dateObj > new Date()) dateObj = new Date();
+                const yyyy = dateObj.getFullYear();
+                const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const dd = String(dateObj.getDate()).padStart(2, '0');
+                const formattedDate = `${yyyy}-${mm}-${dd}`;
+                const fromCurrency = targetCurrency.toLowerCase();
+
+                let apiUrl = `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${formattedDate}/v1/currencies/${fromCurrency}.json`;
+                let response = await fetch(apiUrl);
+                if (!response.ok) {
+                    apiUrl = `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${fromCurrency}.json`;
+                    response = await fetch(apiUrl);
+                }
+                if (!response.ok) throw new Error('Veri yok.');
+                const data = await response.json();
+                if (data && data[fromCurrency] && data[fromCurrency].try) {
+                    const rate = data[fromCurrency].try;
+                    rateCache[cacheKey] = rate;
+                    return rate;
+                }
+            } catch (e) {
+                console.error("Exchange rate fetch error:", e);
+            }
+            return null;
+        }
+
         function inRange(date, startDate, endDate) {
             if (!(date instanceof Date) || isNaN(date)) return false;
             if (startDate && date < startDate) return false;
@@ -456,18 +491,25 @@
                 }
 
                 const colSnap = await db.collection('projects').doc(project.id).collection('collections').orderBy('date', 'asc').get();
-                colSnap.forEach(doc => {
+                for (const doc of colSnap.docs) {
                     const d = doc.data();
                     const recordType = d.recordType || 'Resmi';
-                    if (scope === 'official' && recordType === 'Gayri Resmi') return;
-                    if (scope === 'unofficial' && recordType !== 'Gayri Resmi') return;
+                    if (scope === 'official' && recordType === 'Gayri Resmi') continue;
+                    if (scope === 'unofficial' && recordType !== 'Gayri Resmi') continue;
 
                     const amountTL = parseFloat(d.amountTL ?? d.amount ?? 0) || 0;
                     const amount = parseFloat(d.amount ?? 0) || 0;
                     const currency = d.currency || 'TRY';
-                    const exchangeRate = parseFloat(d.exchangeRate ?? 1) || 1;
+                    let exchangeRate = parseFloat(d.exchangeRate ?? 1) || 1;
                     const rowDate = d.date?.toDate ? d.date.toDate() : new Date();
                     const paymentType = d.paymentType || 'Tahsilat';
+
+                    if (currency === 'TRY' && statementCurrency !== 'TRY') {
+                        const dateStr = rowDate.toISOString().split('T')[0];
+                        const fetchedRate = await fetchUSDorEURRate(dateStr, statementCurrency);
+                        if (fetchedRate) exchangeRate = fetchedRate;
+                    }
+
                     const displayValue = getDisplayValue(amount, currency, exchangeRate, statementCurrency, amountTL);
 
                     const row = {
@@ -492,22 +534,29 @@
                         if (row.isOfficial) periodCreditOfficial += row.credit;
                         else periodCreditUnofficial += row.credit;
                     }
-                });
+                }
 
                 // Fetch Deductions from expenses subcollection where isDeduction is true
                 const dedSnap = await db.collection('projects').doc(project.id).collection('expenses').orderBy('date', 'asc').get();
-                dedSnap.forEach(doc => {
+                for (const doc of dedSnap.docs) {
                     const d = doc.data();
-                    if (!d.isDeduction) return; // Skip normal expenses
+                    if (!d.isDeduction) continue; // Skip normal expenses
                     const recordType = d.recordType || 'Resmi';
-                    if (scope === 'official' && recordType === 'Gayri Resmi') return;
-                    if (scope === 'unofficial' && recordType !== 'Gayri Resmi') return;
+                    if (scope === 'official' && recordType === 'Gayri Resmi') continue;
+                    if (scope === 'unofficial' && recordType !== 'Gayri Resmi') continue;
 
                     const amountTL = parseFloat(d.amountTL ?? d.amount ?? 0) || 0;
                     const amount = parseFloat(d.amount ?? 0) || 0;
                     const currency = d.currency || 'TRY';
-                    const exchangeRate = parseFloat(d.exchangeRate ?? 1) || 1;
+                    let exchangeRate = parseFloat(d.exchangeRate ?? 1) || 1;
                     const rowDate = d.date?.toDate ? d.date.toDate() : new Date();
+
+                    if (currency === 'TRY' && statementCurrency !== 'TRY') {
+                        const dateStr = rowDate.toISOString().split('T')[0];
+                        const fetchedRate = await fetchUSDorEURRate(dateStr, statementCurrency);
+                        if (fetchedRate) exchangeRate = fetchedRate;
+                    }
+
                     const displayValue = getDisplayValue(amount, currency, exchangeRate, statementCurrency, amountTL);
 
                     const row = {
@@ -532,7 +581,7 @@
                         if (row.isOfficial) periodDeductionOfficial += row.credit;
                         else periodDeductionUnofficial += row.credit;
                     }
-                });
+                }
             }
 
             rows.sort((a, b) => a.date - b.date || (b.debit - a.debit));
