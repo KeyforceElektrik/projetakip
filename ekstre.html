@@ -44,6 +44,16 @@
         .sub-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
         .sub-row span:first-child { color: #666; }
         .sub-row span:last-child { font-weight: 600; color: #333; }
+        
+        /* Tablo hücrelerinin alt satıra kaymasını engeller */
+        .financial-table th:nth-child(1), .financial-table td:nth-child(1), /* Tarih */
+        .financial-table th:nth-child(2), .financial-table td:nth-child(2), /* Proje */
+        .financial-table th:nth-child(3), .financial-table td:nth-child(3), /* İşlem */
+        .financial-table th:nth-child(6), .financial-table td:nth-child(6), /* Borç */
+        .financial-table th:nth-child(7), .financial-table td:nth-child(7), /* Alacak */
+        .financial-table th:nth-child(8), .financial-table td:nth-child(8) { /* Bakiye */
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body>
