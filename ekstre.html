@@ -494,10 +494,11 @@
                     }
                 });
 
-                // Fetch Deductions
-                const dedSnap = await db.collection('projects').doc(project.id).collection('deductions').orderBy('date', 'asc').get();
+                // Fetch Deductions from expenses subcollection where isDeduction is true
+                const dedSnap = await db.collection('projects').doc(project.id).collection('expenses').orderBy('date', 'asc').get();
                 dedSnap.forEach(doc => {
                     const d = doc.data();
+                    if (!d.isDeduction) return; // Skip normal expenses
                     const recordType = d.recordType || 'Resmi';
                     if (scope === 'official' && recordType === 'Gayri Resmi') return;
                     if (scope === 'unofficial' && recordType !== 'Gayri Resmi') return;

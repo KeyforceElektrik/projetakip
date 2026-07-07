@@ -384,6 +384,7 @@
                     let pExp = 0;
                     expSnap.forEach(doc => {
                         const d = doc.data();
+                        if (d.isDeduction) return; // Skip deductions in regular expenses report
                         const val = d.amountTL || 0;
                         pExp += val;
                         if (d.recordType === 'Gayri Resmi') grandTotalStats.expGayri += val;

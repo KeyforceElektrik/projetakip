@@ -1249,7 +1249,7 @@
                 const amountTL = amount * exchangeRate;
                 const batch = db.batch();
 
-                const dedRef = db.collection('projects').doc(currentProjectId).collection('deductions').doc();
+                const dedRef = db.collection('projects').doc(currentProjectId).collection('expenses').doc();
                 batch.set(dedRef, {
                     description: description,
                     recordType: recordType,
@@ -1258,7 +1258,8 @@
                     exchangeRate: exchangeRate,
                     amountTL: amountTL,
                     date: firebase.firestore.Timestamp.fromDate(new Date(date)),
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    isDeduction: true
                 });
 
                 let entityId = null;
@@ -1300,7 +1301,8 @@
 
         function updateDeductionTable(snapshot) {
             deductionListBody.innerHTML = '';
-            if (snapshot.empty) { deductionListBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Kayıt yok.</td></tr>'; return; }
+            const isEmpty = snapshot.empty || (Array.isArray(snapshot) && snapshot.length === 0);
+            if (isEmpty) { deductionListBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Kayıt yok.</td></tr>'; return; }
             snapshot.forEach(doc => {
                 const d = doc.data();
                 const row = deductionListBody.insertRow();
@@ -1312,7 +1314,7 @@
                 row.insertCell(4).textContent = d.currency;
                 row.insertCell(5).textContent = d.exchangeRate?.toLocaleString('tr-TR', { minimumFractionDigits: 4 }) || '-';
                 row.insertCell(6).textContent = d.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                row.insertCell(7).innerHTML = `<button class="delete-btn" onclick="deleteFinancialItem('deductions', '${doc.id}', '${d.description}')">Sil</button>`;
+                row.insertCell(7).innerHTML = `<button class="delete-btn" onclick="deleteFinancialItem('expenses', '${doc.id}', '${d.description}')">Sil</button>`;
             });
         }
 
@@ -1336,12 +1338,24 @@
 
                 const expensesSnapshot = await db.collection('projects').doc(projectId).collection('expenses').orderBy('date', 'desc').get();
                 let totalExpenses = 0, tExpResmi = 0, tExpGayri = 0;
+                let totalDeductions = 0, tDedResmi = 0, tDedGayri = 0;
+                const regularExpensesDocs = [];
+                const deductionDocs = [];
+
                 if (!expensesSnapshot.empty) {
                     expensesSnapshot.forEach(doc => {
                         const d = doc.data();
-                        totalExpenses += d.amountTL;
-                        if (d.recordType === 'Gayri Resmi') tExpGayri += d.amountTL;
-                        else tExpResmi += d.amountTL;
+                        if (d.isDeduction) {
+                            deductionDocs.push(doc);
+                            totalDeductions += d.amountTL;
+                            if (d.recordType === 'Gayri Resmi') tDedGayri += d.amountTL;
+                            else tDedResmi += d.amountTL;
+                        } else {
+                            regularExpensesDocs.push(doc);
+                            totalExpenses += d.amountTL;
+                            if (d.recordType === 'Gayri Resmi') tExpGayri += d.amountTL;
+                            else tExpResmi += d.amountTL;
+                        }
                     });
                 }
 
@@ -1353,17 +1367,6 @@
                         totalCollections += d.amountTL;
                         if (d.recordType === 'Gayri Resmi') tColGayri += d.amountTL;
                         else tColResmi += d.amountTL;
-                    });
-                }
-
-                const deductionsSnapshot = await db.collection('projects').doc(projectId).collection('deductions').orderBy('date', 'desc').get();
-                let totalDeductions = 0, tDedResmi = 0, tDedGayri = 0;
-                if (!deductionsSnapshot.empty) {
-                    deductionsSnapshot.forEach(doc => {
-                        const d = doc.data();
-                        totalDeductions += d.amountTL;
-                        if (d.recordType === 'Gayri Resmi') tDedGayri += d.amountTL;
-                        else tDedResmi += d.amountTL;
                     });
                 }
 
@@ -1395,9 +1398,9 @@
                     }
                 }
 
-                updateExpenseTable(expensesSnapshot);
+                updateExpenseTable(regularExpensesDocs);
                 updateCollectionTable(collectionsSnapshot);
-                updateDeductionTable(deductionsSnapshot);
+                updateDeductionTable(deductionDocs);
                 updateBalanceChart(totalCollections, totalExpenses);
 
             } catch (error) {
@@ -1408,7 +1411,8 @@
 
         function updateExpenseTable(snapshot) {
             expenseListBody.innerHTML = '';
-            if (snapshot.empty) { expenseListBody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Kayıt yok.</td></tr>'; return; }
+            const isEmpty = snapshot.empty || (Array.isArray(snapshot) && snapshot.length === 0);
+            if (isEmpty) { expenseListBody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Kayıt yok.</td></tr>'; return; }
             snapshot.forEach(doc => {
                 const d = doc.data();
                 const row = expenseListBody.insertRow();
