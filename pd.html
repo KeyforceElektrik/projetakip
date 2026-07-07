@@ -134,6 +134,7 @@
         <div class="tab-buttons">
             <button class="tab-button active" data-tab="expenses">Harcamalar</button>
             <button class="tab-button" data-tab="collections">Tahsilatlar</button>
+            <button class="tab-button" data-tab="deductions">Kesintiler & Cezalar</button>
             <button class="tab-button" data-tab="summary">Özet</button>
             <button class="tab-button" data-tab="simulation" style="color: #6f42c1;">🚀 Kar Yatırım Analizi</button>
         </div>
@@ -301,6 +302,67 @@
             </div>
         </div>
 
+        <div id="deductions" class="tab-content">
+            <h3 class="section-subtitle">Yeni Kesinti / Ceza Ekle</h3>
+            <form id="addDeductionForm" class="form-grid">
+                <div class="form-group">
+                    <label for="deductionDescription">Açıklama / Sebep:</label>
+                    <input type="text" id="deductionDescription" placeholder="Kesinti veya Ceza Nedeni..." required>
+                </div>
+                <div class="form-group">
+                    <label for="deductionType">Kayıt Türü:</label>
+                    <select id="deductionType" required style="background-color: #fff8e1;">
+                        <option value="Resmi">Resmi (Sözleşmeden Düşen)</option>
+                        <option value="Gayri Resmi">Gayri Resmi (Elden/Ceza)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="deductionAmount">Miktar:</label>
+                    <input type="number" id="deductionAmount" step="0.01" value="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="deductionCurrency">Para Birimi:</label>
+                    <select id="deductionCurrency" required>
+                        <option value="TRY">TL</option>
+                        <option value="USD">USD</option>
+                        <option value="EUR">EUR</option>
+                    </select>
+                </div>
+                <div class="form-group" id="deductionExchangeRateGroup">
+                    <label for="deductionExchangeRate">Kur (1 USD/EUR = ... TL):</label>
+                    <input type="number" id="deductionExchangeRate" step="0.0001" value="1" required>
+                    <small>Otomatik çekmek için tarih seçin.</small>
+                </div>
+                <div class="form-group">
+                    <label for="deductionDate">Tarih:</label>
+                    <input type="date" id="deductionDate" required>
+                </div>
+                <div class="form-group full-width">
+                    <button type="submit" class="button primary">Kesinti/Ceza Ekle & Kaydet</button>
+                </div>
+            </form>
+            <h3 class="section-subtitle">Kesinti & Ceza Listesi</h3>
+            <div class="financial-table-container">
+                <table class="financial-table">
+                    <thead>
+                        <tr>
+                            <th>Tarih</th>
+                            <th>Tür</th>
+                            <th>Açıklama</th>
+                            <th>Miktar</th>
+                            <th>Para Birimi</th>
+                            <th>Kur</th>
+                            <th>Tutar (TL)</th>
+                            <th>İşlemler</th>
+                        </tr>
+                    </thead>
+                    <tbody id="deductionListBody">
+                        <tr><td colspan="8" style="text-align:center;">Kesintiler yükleniyor...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <div id="summary" class="tab-content">
             <h3 class="section-subtitle">Finansal Özet</h3>
             <div class="summary-cards">
@@ -318,6 +380,14 @@
                     <div class="sub-summary">
                         <div class="sub-row"><span>Resmi:</span> <span id="totalCollectionsResmi">0 ₺</span></div>
                         <div class="sub-row"><span>Gayri Resmi:</span> <span id="totalCollectionsGayri">0 ₺</span></div>
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <h4>Toplam Kesinti & Ceza (TL)</h4>
+                    <p id="totalDeductionsTL" class="summary-value"></p>
+                    <div class="sub-summary">
+                        <div class="sub-row"><span>Resmi:</span> <span id="totalDeductionsResmi">0 ₺</span></div>
+                        <div class="sub-row"><span>Gayri Resmi:</span> <span id="totalDeductionsGayri">0 ₺</span></div>
                     </div>
                 </div>
                 <div class="summary-card">
@@ -422,13 +492,23 @@
         const checkDetailsDiv = document.getElementById('checkDetailsDiv');
         const barterDetailsDiv = document.getElementById('barterDetailsDiv');
         
+        const addDeductionForm = document.getElementById('addDeductionForm');
+        const deductionListBody = document.getElementById('deductionListBody');
+        const deductionCurrencySelect = document.getElementById('deductionCurrency');
+        const deductionExchangeRateInput = document.getElementById('deductionExchangeRate');
+        const deductionExchangeRateGroup = document.getElementById('deductionExchangeRateGroup');
+        const deductionDateInput = document.getElementById('deductionDate');
+
         const totalExpensesTL = document.getElementById('totalExpensesTL');
         const totalCollectionsTL = document.getElementById('totalCollectionsTL');
+        const totalDeductionsTL = document.getElementById('totalDeductionsTL');
         const remainingBalanceTL = document.getElementById('remainingBalanceTL');
         const totalExpensesResmi = document.getElementById('totalExpensesResmi');
         const totalExpensesGayri = document.getElementById('totalExpensesGayri');
         const totalCollectionsResmi = document.getElementById('totalCollectionsResmi');
         const totalCollectionsGayri = document.getElementById('totalCollectionsGayri');
+        const totalDeductionsResmi = document.getElementById('totalDeductionsResmi');
+        const totalDeductionsGayri = document.getElementById('totalDeductionsGayri');
 
         const simContainer = document.getElementById('simContainer');
         const simDescription = document.getElementById('simDescription');
@@ -453,8 +533,10 @@
                 const today = new Date().toISOString().split('T')[0];
                 expenseDateInput.value = today;
                 collectionDateInput.value = today;
+                deductionDateInput.value = today;
                 expenseExchangeRateGroup.style.display = 'none';
                 collectionExchangeRateGroup.style.display = 'none';
+                deductionExchangeRateGroup.style.display = 'none';
             } else {
                 window.location.href = 'auth.html';
             }
@@ -1123,6 +1205,117 @@
             await applyRecordTypeWalletBehavior('collection');
         });
 
+        deductionCurrencySelect.addEventListener('change', async () => {
+            const curr = deductionCurrencySelect.value;
+            const date = deductionDateInput.value;
+            if (curr === 'TRY') {
+                deductionExchangeRateInput.value = '1';
+                deductionExchangeRateGroup.style.display = 'none';
+            } else {
+                deductionExchangeRateGroup.style.display = 'block';
+                if (date) {
+                    const rate = await fetchCurrencyRates(date, curr);
+                    if (rate) deductionExchangeRateInput.value = rate.toFixed(4);
+                }
+            }
+        });
+
+        deductionDateInput.addEventListener('change', async () => {
+            const curr = deductionCurrencySelect.value;
+            const date = deductionDateInput.value;
+            if (curr !== 'TRY' && date) {
+                const rate = await fetchCurrencyRates(date, curr);
+                if (rate) deductionExchangeRateInput.value = rate.toFixed(4);
+            }
+        });
+
+        addDeductionForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            toggleLoading(true);
+
+            const description = document.getElementById('deductionDescription').value.trim();
+            const amount = parseFloat(document.getElementById('deductionAmount').value);
+            const currency = deductionCurrencySelect.value;
+            const exchangeRate = parseFloat(deductionExchangeRateInput.value);
+            const date = deductionDateInput.value;
+            const recordType = document.getElementById('deductionType').value;
+
+            if (!description || amount <= 0 || !date) {
+                toggleLoading(false);
+                return showSystemMessage('Lütfen tüm alanları doldurun.', true);
+            }
+
+            try {
+                const amountTL = amount * exchangeRate;
+                const batch = db.batch();
+
+                const dedRef = db.collection('projects').doc(currentProjectId).collection('deductions').doc();
+                batch.set(dedRef, {
+                    description: description,
+                    recordType: recordType,
+                    amount: amount,
+                    currency: currency,
+                    exchangeRate: exchangeRate,
+                    amountTL: amountTL,
+                    date: firebase.firestore.Timestamp.fromDate(new Date(date)),
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                let entityId = null;
+                const entitiesQuery = await db.collection('entities')
+                    .where('ownerId', '==', currentUserId)
+                    .where('name', '==', currentCustomerName)
+                    .limit(1)
+                    .get();
+
+                if (!entitiesQuery.empty) {
+                    entityId = entitiesQuery.docs[0].id;
+                }
+
+                if (entityId) {
+                    const transRef = db.collection('entity_transactions').doc();
+                    batch.set(transRef, {
+                        ownerId: currentUserId,
+                        entityId: entityId,
+                        type: 'Kesinti/Ceza',
+                        amount: amountTL,
+                        description: `Proje Kesintisi/Cezası: ${description}`,
+                        date: firebase.firestore.Timestamp.fromDate(new Date(date)),
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    const entityRef = db.collection('entities').doc(entityId);
+                    batch.update(entityRef, { balance: firebase.firestore.FieldValue.increment(-amountTL) });
+                }
+
+                await batch.commit();
+                showSystemMessage('Kesinti/Ceza kaydedildi.');
+                addDeductionForm.reset();
+                deductionDateInput.value = new Date().toISOString().split('T')[0];
+                deductionExchangeRateGroup.style.display = 'none';
+                loadFinancialData(currentProjectId);
+
+            } catch (error) { showSystemMessage('Hata: ' + error.message, true); }
+            finally { toggleLoading(false); }
+        });
+
+        function updateDeductionTable(snapshot) {
+            deductionListBody.innerHTML = '';
+            if (snapshot.empty) { deductionListBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Kayıt yok.</td></tr>'; return; }
+            snapshot.forEach(doc => {
+                const d = doc.data();
+                const row = deductionListBody.insertRow();
+                row.insertCell(0).textContent = d.date ? d.date.toDate().toLocaleDateString('tr-TR') : '-';
+                const typeCell = row.insertCell(1);
+                typeCell.innerHTML = `<span class="type-badge ${d.recordType === 'Gayri Resmi' ? 'type-gayriresmi' : 'type-resmi'}">${d.recordType || 'Resmi'}</span>`;
+                row.insertCell(2).textContent = d.description || '-';
+                row.insertCell(3).textContent = d.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+                row.insertCell(4).textContent = d.currency;
+                row.insertCell(5).textContent = d.exchangeRate?.toLocaleString('tr-TR', { minimumFractionDigits: 4 }) || '-';
+                row.insertCell(6).textContent = d.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                row.insertCell(7).innerHTML = `<button class="delete-btn" onclick="deleteFinancialItem('deductions', '${doc.id}', '${d.description}')">Sil</button>`;
+            });
+        }
+
         async function deleteFinancialItem(collectionName, docId, description) {
             if (confirm(`"${description}" silinecek? (Not: Cüzdan/Cari bakiyesi otomatik geri alınmaz, manuel düzeltme gerekebilir.)`)) {
                 try {
@@ -1163,6 +1356,17 @@
                     });
                 }
 
+                const deductionsSnapshot = await db.collection('projects').doc(projectId).collection('deductions').orderBy('date', 'desc').get();
+                let totalDeductions = 0, tDedResmi = 0, tDedGayri = 0;
+                if (!deductionsSnapshot.empty) {
+                    deductionsSnapshot.forEach(doc => {
+                        const d = doc.data();
+                        totalDeductions += d.amountTL;
+                        if (d.recordType === 'Gayri Resmi') tDedGayri += d.amountTL;
+                        else tDedResmi += d.amountTL;
+                    });
+                }
+
                 totalExpensesTL.textContent = totalExpenses.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 totalExpensesResmi.textContent = tExpResmi.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 totalExpensesGayri.textContent = tExpGayri.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
@@ -1170,6 +1374,10 @@
                 totalCollectionsTL.textContent = totalCollections.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 totalCollectionsResmi.textContent = tColResmi.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 totalCollectionsGayri.textContent = tColGayri.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+
+                totalDeductionsTL.textContent = totalDeductions.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                totalDeductionsResmi.textContent = tDedResmi.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                totalDeductionsGayri.textContent = tDedGayri.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
 
                 const remainingBalance = totalCollections - totalExpenses;
                 remainingBalanceTL.textContent = remainingBalance.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
@@ -1189,6 +1397,7 @@
 
                 updateExpenseTable(expensesSnapshot);
                 updateCollectionTable(collectionsSnapshot);
+                updateDeductionTable(deductionsSnapshot);
                 updateBalanceChart(totalCollections, totalExpenses);
 
             } catch (error) { console.error(error); }

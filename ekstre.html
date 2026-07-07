@@ -31,6 +31,7 @@
         .badge-debit { background:#fee2e2; color:#b91c1c; }
         .badge-credit { background:#dcfce7; color:#15803d; }
         .badge-opening { background:#dbeafe; color:#1d4ed8; }
+        .badge-deduction { background:#fef3c7; color:#d97706; }
         .small-note { font-size:0.85em; color:#666; margin-top:10px; }
         .header-right { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
         .print-only { display:none; }
@@ -118,6 +119,7 @@
             <div class="summary-item"><h4>Açılış Bakiyesi</h4><div class="value balance" id="openingBalance">0,00 ₺</div></div>
             <div class="summary-item"><h4>Dönem Borç</h4><div class="value debit" id="periodDebit">0,00 ₺</div></div>
             <div class="summary-item"><h4>Dönem Tahsilat</h4><div class="value credit" id="periodCredit">0,00 ₺</div></div>
+            <div class="summary-item"><h4>Dönem Kesinti/Ceza</h4><div class="value credit" id="periodDeduction" style="color:#d97706;">0,00 ₺</div></div>
             <div class="summary-item"><h4>Kapanış Bakiyesi</h4><div class="value balance" id="closingBalance">0,00 ₺</div></div>
         </div>
 
@@ -199,6 +201,7 @@
         const openingBalanceEl = document.getElementById('openingBalance');
         const periodDebitEl = document.getElementById('periodDebit');
         const periodCreditEl = document.getElementById('periodCredit');
+        const periodDeductionEl = document.getElementById('periodDeduction');
         const closingBalanceEl = document.getElementById('closingBalance');
         const printHeader = document.getElementById('printHeader');
 
@@ -400,6 +403,8 @@
             let periodDebitUnofficial = 0;
             let periodCreditOfficial = 0;
             let periodCreditUnofficial = 0;
+            let periodDeductionOfficial = 0;
+            let periodDeductionUnofficial = 0;
 
             for (const project of candidateProjects) {
                 const contract = getContractBreakdown(project);
@@ -488,6 +493,45 @@
                         else periodCreditUnofficial += row.credit;
                     }
                 });
+
+                // Fetch Deductions
+                const dedSnap = await db.collection('projects').doc(project.id).collection('deductions').orderBy('date', 'asc').get();
+                dedSnap.forEach(doc => {
+                    const d = doc.data();
+                    const recordType = d.recordType || 'Resmi';
+                    if (scope === 'official' && recordType === 'Gayri Resmi') return;
+                    if (scope === 'unofficial' && recordType !== 'Gayri Resmi') return;
+
+                    const amountTL = parseFloat(d.amountTL ?? d.amount ?? 0) || 0;
+                    const amount = parseFloat(d.amount ?? 0) || 0;
+                    const currency = d.currency || 'TRY';
+                    const exchangeRate = parseFloat(d.exchangeRate ?? 1) || 1;
+                    const rowDate = d.date?.toDate ? d.date.toDate() : new Date();
+                    const displayValue = getDisplayValue(amount, currency, exchangeRate, statementCurrency, amountTL);
+
+                    const row = {
+                        date: rowDate,
+                        projectName,
+                        kind: 'Alacak',
+                        kindLabel: 'Kesinti/Ceza',
+                        badge: 'badge-deduction',
+                        description: d.description || 'Kesinti',
+                        detail: `${recordType} / Kesinti` + (amount > 0 ? ` / ${displayValue.fallback ? formatMoney(amount, currency, false) + ' (TL özeti)' : formatMoney(amount, currency, false)}` : ''),
+                        debit: 0,
+                        credit: displayValue.numeric,
+                        isOfficial: recordType !== 'Gayri Resmi'
+                    };
+
+                    if (beforeRange(rowDate, startDate)) {
+                        if (row.isOfficial) openingOfficial -= row.credit;
+                        else openingUnofficial -= row.credit;
+                    }
+                    else if (inRange(rowDate, startDate, endDate)) {
+                        rows.push(row);
+                        if (row.isOfficial) periodDeductionOfficial += row.credit;
+                        else periodDeductionUnofficial += row.credit;
+                    }
+                });
             }
 
             rows.sort((a, b) => a.date - b.date || (b.debit - a.debit));
@@ -533,10 +577,11 @@
             const openingBalance = openingOfficial + openingUnofficial;
             const periodDebit = periodDebitOfficial + periodDebitUnofficial;
             const periodCredit = periodCreditOfficial + periodCreditUnofficial;
-            const closingBalance = openingBalance + periodDebit - periodCredit;
+            const periodDeduction = periodDeductionOfficial + periodDeductionUnofficial;
+            const closingBalance = openingBalance + periodDebit - periodCredit - periodDeduction;
 
-            const closingOfficial = openingOfficial + periodDebitOfficial - periodCreditOfficial;
-            const closingUnofficial = openingUnofficial + periodDebitUnofficial - periodCreditUnofficial;
+            const closingOfficial = openingOfficial + periodDebitOfficial - periodCreditOfficial - periodDeductionOfficial;
+            const closingUnofficial = openingUnofficial + periodDebitUnofficial - periodCreditUnofficial - periodDeductionUnofficial;
 
             lastStatement = {
                 customerName,
@@ -548,6 +593,7 @@
                 openingBalance,
                 periodDebit,
                 periodCredit,
+                periodDeduction,
                 closingBalance,
                 generatedAt: new Date(),
                 title: companyTitleInput.value.trim() || 'KEYFORCE Müşteri Ekstresi',
@@ -576,6 +622,13 @@
                         <div class="sub-row"><span>Gayri Resmi:</span> <span>${formatMoney(periodCreditUnofficial, statementCurrency)}</span></div>
                     </div>
                 `;
+                periodDeductionEl.innerHTML = `
+                    <div>${formatMoney(periodDeduction, statementCurrency)}</div>
+                    <div class="sub-summary">
+                        <div class="sub-row"><span>Resmi:</span> <span>${formatMoney(periodDeductionOfficial, statementCurrency)}</span></div>
+                        <div class="sub-row"><span>Gayri Resmi:</span> <span>${formatMoney(periodDeductionUnofficial, statementCurrency)}</span></div>
+                    </div>
+                `;
                 closingBalanceEl.innerHTML = `
                     <div>${formatMoney(closingBalance, statementCurrency)}</div>
                     <div class="sub-summary">
@@ -587,6 +640,7 @@
                 openingBalanceEl.textContent = formatMoney(openingBalance, statementCurrency);
                 periodDebitEl.textContent = formatMoney(periodDebit, statementCurrency);
                 periodCreditEl.textContent = formatMoney(periodCredit, statementCurrency);
+                periodDeductionEl.textContent = formatMoney(periodDeduction, statementCurrency);
                 closingBalanceEl.textContent = formatMoney(closingBalance, statementCurrency);
             }
 
@@ -622,6 +676,7 @@
                 openingBalanceEl.textContent = '0,00 ₺';
                 periodDebitEl.textContent = '0,00 ₺';
                 periodCreditEl.textContent = '0,00 ₺';
+                periodDeductionEl.textContent = '0,00 ₺';
                 closingBalanceEl.textContent = '0,00 ₺';
             }
         }
