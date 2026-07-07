@@ -40,6 +40,10 @@
             header, .filter-card, .page-actions, .screen-only, #systemMessage { display:none !important; }
             .print-only { display:block; }
         }
+        .sub-summary { margin-top: 8px; font-size: 0.58em; color: #555; border-top: 1px dashed #e0e0e0; padding-top: 6px; width: 100%; font-weight: normal; }
+        .sub-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+        .sub-row span:first-child { color: #666; }
+        .sub-row span:last-child { font-weight: 600; color: #333; }
     </style>
 </head>
 <body>
@@ -380,9 +384,12 @@
             }
 
             const rows = [];
-            let openingBalance = 0;
-            let periodDebit = 0;
-            let periodCredit = 0;
+            let openingOfficial = 0;
+            let openingUnofficial = 0;
+            let periodDebitOfficial = 0;
+            let periodDebitUnofficial = 0;
+            let periodCreditOfficial = 0;
+            let periodCreditUnofficial = 0;
 
             for (const project of candidateProjects) {
                 const contract = getContractBreakdown(project);
@@ -401,7 +408,8 @@
                         description: 'Resmi sözleşme tutarı',
                         detail: officialDisplay.fallback ? `${formatMoney(contract.official.amount, contract.official.currency, false)} (TL özeti)` : formatMoney(contract.official.amount, contract.official.currency, false),
                         debit: officialDisplay.numeric,
-                        credit: 0
+                        credit: 0,
+                        isOfficial: true
                     });
                 }
                 if (scope !== 'official' && contract.unofficial.amount > 0) {
@@ -415,13 +423,21 @@
                         description: 'Gayri resmi anlaşma tutarı',
                         detail: unofficialDisplay.fallback ? `${formatMoney(contract.unofficial.amount, contract.unofficial.currency, false)} (TL özeti)` : formatMoney(contract.unofficial.amount, contract.unofficial.currency, false),
                         debit: unofficialDisplay.numeric,
-                        credit: 0
+                        credit: 0,
+                        isOfficial: false
                     });
                 }
 
                 for (const row of debitEntries) {
-                    if (beforeRange(row.date, startDate)) openingBalance += row.debit;
-                    else if (inRange(row.date, startDate, endDate)) { rows.push(row); periodDebit += row.debit; }
+                    if (beforeRange(row.date, startDate)) {
+                        if (row.isOfficial) openingOfficial += row.debit;
+                        else openingUnofficial += row.debit;
+                    }
+                    else if (inRange(row.date, startDate, endDate)) {
+                        rows.push(row);
+                        if (row.isOfficial) periodDebitOfficial += row.debit;
+                        else periodDebitUnofficial += row.debit;
+                    }
                 }
 
                 const colSnap = await db.collection('projects').doc(project.id).collection('collections').orderBy('date', 'asc').get();
@@ -448,19 +464,28 @@
                         description: d.description || paymentType,
                         detail: `${recordType} / ${paymentType}` + (amount > 0 ? ` / ${displayValue.fallback ? formatMoney(amount, currency, false) + ' (TL özeti)' : formatMoney(amount, currency, false)}` : ''),
                         debit: 0,
-                        credit: displayValue.numeric
+                        credit: displayValue.numeric,
+                        isOfficial: recordType !== 'Gayri Resmi'
                     };
 
-                    if (beforeRange(rowDate, startDate)) openingBalance -= row.credit;
-                    else if (inRange(rowDate, startDate, endDate)) { rows.push(row); periodCredit += row.credit; }
+                    if (beforeRange(rowDate, startDate)) {
+                        if (row.isOfficial) openingOfficial -= row.credit;
+                        else openingUnofficial -= row.credit;
+                    }
+                    else if (inRange(rowDate, startDate, endDate)) {
+                        rows.push(row);
+                        if (row.isOfficial) periodCreditOfficial += row.credit;
+                        else periodCreditUnofficial += row.credit;
+                    }
                 });
             }
 
             rows.sort((a, b) => a.date - b.date || (b.debit - a.debit));
-            let runningBalance = openingBalance;
+            let runningOfficial = openingOfficial;
+            let runningUnofficial = openingUnofficial;
             const renderedRows = [];
 
-            if (openingBalance !== 0) {
+            if (openingOfficial !== 0 || openingUnofficial !== 0) {
                 renderedRows.push(`
                     <tr>
                         <td>${formatDateTR(startDate || new Date())}</td>
@@ -470,13 +495,17 @@
                         <td>Önceki dönemlerden devreden bakiye</td>
                         <td style="text-align:right;">-</td>
                         <td style="text-align:right;">-</td>
-                        <td style="text-align:right; font-weight:700;">${formatMoney(openingBalance, statementCurrency)}</td>
+                        <td style="text-align:right; font-weight:700;">${formatRunningBalance(openingOfficial, openingUnofficial, scope, statementCurrency)}</td>
                     </tr>
                 `);
             }
 
             for (const row of rows) {
-                runningBalance += row.debit - row.credit;
+                if (row.isOfficial) {
+                    runningOfficial += row.debit - row.credit;
+                } else {
+                    runningUnofficial += row.debit - row.credit;
+                }
                 renderedRows.push(`
                     <tr>
                         <td>${formatDateTR(row.date)}</td>
@@ -486,12 +515,19 @@
                         <td>${escapeHtml(row.detail)}</td>
                         <td style="text-align:right; color:#dc3545; font-weight:600;">${row.debit ? formatMoney(row.debit, statementCurrency) : '-'}</td>
                         <td style="text-align:right; color:#28a745; font-weight:600;">${row.credit ? formatMoney(row.credit, statementCurrency) : '-'}</td>
-                        <td style="text-align:right; font-weight:700;">${formatMoney(runningBalance, statementCurrency)}</td>
+                        <td style="text-align:right; font-weight:700;">${formatRunningBalance(runningOfficial, runningUnofficial, scope, statementCurrency)}</td>
                     </tr>
                 `);
             }
 
+            const openingBalance = openingOfficial + openingUnofficial;
+            const periodDebit = periodDebitOfficial + periodDebitUnofficial;
+            const periodCredit = periodCreditOfficial + periodCreditUnofficial;
             const closingBalance = openingBalance + periodDebit - periodCredit;
+
+            const closingOfficial = openingOfficial + periodDebitOfficial - periodCreditOfficial;
+            const closingUnofficial = openingUnofficial + periodDebitUnofficial - periodCreditUnofficial;
+
             lastStatement = {
                 customerName,
                 selectedProjectName: selectedProjectId ? (candidateProjects[0]?.projectName || 'Seçili Proje') : 'Tüm Projeler',
@@ -508,10 +544,42 @@
                 statementCurrency
             };
 
-            openingBalanceEl.textContent = formatMoney(openingBalance, statementCurrency);
-            periodDebitEl.textContent = formatMoney(periodDebit, statementCurrency);
-            periodCreditEl.textContent = formatMoney(periodCredit, statementCurrency);
-            closingBalanceEl.textContent = formatMoney(closingBalance, statementCurrency);
+            if (scope === 'all') {
+                openingBalanceEl.innerHTML = `
+                    <div>${formatMoney(openingBalance, statementCurrency)}</div>
+                    <div class="sub-summary">
+                        <div class="sub-row"><span>Resmi:</span> <span>${formatMoney(openingOfficial, statementCurrency)}</span></div>
+                        <div class="sub-row"><span>Gayri Resmi:</span> <span>${formatMoney(openingUnofficial, statementCurrency)}</span></div>
+                    </div>
+                `;
+                periodDebitEl.innerHTML = `
+                    <div>${formatMoney(periodDebit, statementCurrency)}</div>
+                    <div class="sub-summary">
+                        <div class="sub-row"><span>Resmi:</span> <span>${formatMoney(periodDebitOfficial, statementCurrency)}</span></div>
+                        <div class="sub-row"><span>Gayri Resmi:</span> <span>${formatMoney(periodDebitUnofficial, statementCurrency)}</span></div>
+                    </div>
+                `;
+                periodCreditEl.innerHTML = `
+                    <div>${formatMoney(periodCredit, statementCurrency)}</div>
+                    <div class="sub-summary">
+                        <div class="sub-row"><span>Resmi:</span> <span>${formatMoney(periodCreditOfficial, statementCurrency)}</span></div>
+                        <div class="sub-row"><span>Gayri Resmi:</span> <span>${formatMoney(periodCreditUnofficial, statementCurrency)}</span></div>
+                    </div>
+                `;
+                closingBalanceEl.innerHTML = `
+                    <div>${formatMoney(closingBalance, statementCurrency)}</div>
+                    <div class="sub-summary">
+                        <div class="sub-row"><span>Resmi:</span> <span>${formatMoney(closingOfficial, statementCurrency)}</span></div>
+                        <div class="sub-row"><span>Gayri Resmi:</span> <span>${formatMoney(closingUnofficial, statementCurrency)}</span></div>
+                    </div>
+                `;
+            } else {
+                openingBalanceEl.textContent = formatMoney(openingBalance, statementCurrency);
+                periodDebitEl.textContent = formatMoney(periodDebit, statementCurrency);
+                periodCreditEl.textContent = formatMoney(periodCredit, statementCurrency);
+                closingBalanceEl.textContent = formatMoney(closingBalance, statementCurrency);
+            }
+
             metaCustomer.textContent = customerName;
             metaProject.textContent = lastStatement.selectedProjectName;
             metaRange.textContent = formatRangeLabel(startDate, endDate);
@@ -586,6 +654,18 @@
             const amount = Number(value) || 0;
             if (withStyle) return amount.toLocaleString('tr-TR', { style: 'currency', currency: currency || 'TRY' });
             return amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (currency || 'TRY');
+        }
+        function formatRunningBalance(rOfficial, rUnofficial, scope, statementCurrency) {
+            if (scope === 'official') {
+                return formatMoney(rOfficial, statementCurrency);
+            } else if (scope === 'unofficial') {
+                return formatMoney(rUnofficial, statementCurrency);
+            } else {
+                return `<div style="font-size:0.88em; line-height:1.2; font-weight:normal; text-align:right;">
+                    <span style="color:#0d47a1; font-weight:600;">R: ${formatMoney(rOfficial, statementCurrency)}</span><br>
+                    <span style="color:#e65100; font-weight:600;">GR: ${formatMoney(rUnofficial, statementCurrency)}</span>
+                </div>`;
+            }
         }
         function slugify(text) {
             return (text || 'ekstre').toString().toLowerCase('tr-TR')
