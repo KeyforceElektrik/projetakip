@@ -1171,7 +1171,7 @@
                 totalCollectionsResmi.textContent = tColResmi.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 totalCollectionsGayri.textContent = tColGayri.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
 
-                const remainingBalance = contractAmountTL - totalCollections;
+                const remainingBalance = totalCollections - totalExpenses;
                 remainingBalanceTL.textContent = remainingBalance.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 remainingBalanceTL.classList.remove('positive', 'negative');
                 remainingBalanceTL.classList.add(remainingBalance >= 0 ? 'positive' : 'negative');
@@ -1196,19 +1196,20 @@
 
         function updateExpenseTable(snapshot) {
             expenseListBody.innerHTML = '';
-            if (snapshot.empty) { expenseListBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Kayıt yok.</td></tr>'; return; }
+            if (snapshot.empty) { expenseListBody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Kayıt yok.</td></tr>'; return; }
             snapshot.forEach(doc => {
                 const d = doc.data();
                 const row = expenseListBody.insertRow();
                 row.insertCell(0).textContent = d.date ? d.date.toDate().toLocaleDateString('tr-TR') : '-';
                 const typeCell = row.insertCell(1);
                 typeCell.innerHTML = `<span class="type-badge ${d.recordType === 'Gayri Resmi' ? 'type-gayriresmi' : 'type-resmi'}">${d.recordType || 'Resmi'}</span>`;
-                row.insertCell(2).textContent = d.payee ? `${d.payee} (${d.description})` : d.description; // Kime ödendiği
-                row.insertCell(3).textContent = d.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
-                row.insertCell(4).textContent = d.currency;
-                row.insertCell(5).textContent = d.exchangeRate?.toLocaleString('tr-TR', { minimumFractionDigits: 4 }) || '-';
-                row.insertCell(6).textContent = d.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-                row.insertCell(7).innerHTML = `<button class="delete-btn" onclick="deleteFinancialItem('expenses', '${doc.id}', '${d.description}')">Sil</button>`;
+                row.insertCell(2).textContent = d.payee || '-';
+                row.insertCell(3).textContent = d.description || '-';
+                row.insertCell(4).textContent = d.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+                row.insertCell(5).textContent = d.currency;
+                row.insertCell(6).textContent = d.exchangeRate?.toLocaleString('tr-TR', { minimumFractionDigits: 4 }) || '-';
+                row.insertCell(7).textContent = d.amountTL.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
+                row.insertCell(8).innerHTML = `<button class="delete-btn" onclick="deleteFinancialItem('expenses', '${doc.id}', '${d.description}')">Sil</button>`;
             });
         }
 
