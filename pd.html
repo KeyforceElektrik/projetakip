@@ -391,7 +391,7 @@
                     </div>
                 </div>
                 <div class="summary-card">
-                    <h4>Kalan Bakiye (Net Kar)</h4>
+                    <h4>Proje Net Karı</h4>
                     <p id="remainingBalanceTL" class="summary-value"></p>
                 </div>
             </div>
@@ -1382,13 +1382,13 @@
                 totalDeductionsResmi.textContent = tDedResmi.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 totalDeductionsGayri.textContent = tDedGayri.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
 
-                const remainingBalance = totalCollections - totalExpenses;
+                const remainingBalance = contractAmountTL - totalExpenses - totalDeductions;
                 remainingBalanceTL.textContent = remainingBalance.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
                 remainingBalanceTL.classList.remove('positive', 'negative');
                 remainingBalanceTL.classList.add(remainingBalance >= 0 ? 'positive' : 'negative');
 
                 // Simülasyon Verisi
-                const netProfitTL = totalCollections - totalExpenses;
+                const netProfitTL = contractAmountTL - totalExpenses - totalDeductions;
                 const today = new Date().toISOString().split('T')[0];
                 const currentUsdRate = await fetchCurrencyRates(today, 'USD');
                 if (currentUsdRate) {
@@ -1401,7 +1401,7 @@
                 updateExpenseTable(regularExpensesDocs);
                 updateCollectionTable(collectionsSnapshot);
                 updateDeductionTable(deductionDocs);
-                updateBalanceChart(totalCollections, totalExpenses);
+                updateBalanceChart(contractAmountTL, totalExpenses, remainingBalance);
 
             } catch (error) {
                 console.error(error);
@@ -1448,18 +1448,18 @@
             });
         }
 
-        function updateBalanceChart(tahsilat, harcama) {
+        function updateBalanceChart(sozlesme, harcama, netKar) {
             const ctx = document.getElementById('balanceChart').getContext('2d');
             if (balanceChart) balanceChart.destroy();
             balanceChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: ['Toplam Tahsilat', 'Toplam Harcama', 'Kalan Bakiye'],
+                    labels: ['Sözleşme Bedeli', 'Toplam Harcama', 'Proje Net Karı'],
                     datasets: [{
                         label: 'Tutar (TL)',
-                        data: [tahsilat, harcama, tahsilat - harcama],
-                        backgroundColor: ['rgba(40, 167, 69, 0.7)', 'rgba(220, 53, 69, 0.7)', (tahsilat - harcama >= 0) ? 'rgba(0, 123, 255, 0.7)' : 'rgba(255, 193, 7, 0.7)'],
-                        borderColor: ['rgba(40, 167, 69, 1)', 'rgba(220, 53, 69, 1)', (tahsilat - harcama >= 0) ? 'rgba(0, 123, 255, 1)' : 'rgba(255, 193, 7, 1)'],
+                        data: [sozlesme, harcama, netKar],
+                        backgroundColor: ['rgba(40, 167, 69, 0.7)', 'rgba(220, 53, 69, 0.7)', (netKar >= 0) ? 'rgba(0, 123, 255, 0.7)' : 'rgba(255, 193, 7, 0.7)'],
+                        borderColor: ['rgba(40, 167, 69, 1)', 'rgba(220, 53, 69, 1)', (netKar >= 0) ? 'rgba(0, 123, 255, 1)' : 'rgba(255, 193, 7, 1)'],
                         borderWidth: 1
                     }]
                 },
